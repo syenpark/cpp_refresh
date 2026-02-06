@@ -15,9 +15,54 @@ You must be able to answer (out loud)
 struct Obj {
     int id;
     // constructor
-    Obj(int i): id(i) { // initializer list vs constructor body assignment
+    Obj(int i): id(i) { // initializer list
         std::cout << "Construct " << id << "\n";
     }
+
+    /* 
+    initializer list version
+    Step 1: Object allocation begins
+    id is INITIALIZED directly with value i
+    
+    STACK:
+    ┌──────────────────────────┐
+    │  Obj being constructed:  │
+    │    id = 5 (initialized)  │  ✅ Set directly to 5
+    └──────────────────────────┘
+
+    Step 2: Enter constructor body
+    id already has correct value
+    Print message
+    
+    --
+    vs initializer contructor body assignment version
+    
+    Obj(int i) {
+        id = i;
+        std::cout << "Construct " << id << "\n";
+    }
+
+    Step 1: Object allocation begins
+    id is DEFAULT-INITIALIZED (undefined/garbage for int!)
+
+    STACK:
+    ┌──────────────────────────┐
+    │  Obj being constructed:  │
+    │    id = ??? (garbage)    │  ⚠️ Undefined value!
+    └──────────────────────────┘
+
+    Step 2: Enter constructor body
+    id = i;  (assignment)
+
+    STACK:
+    ┌──────────────────────────┐
+    │  Obj being constructed:  │
+    │    id = 5 (assigned)     │  ✅ Now set to 5
+    └──────────────────────────┘
+
+    Print message
+    */
+
     // destructor
     ~Obj() {
         std::cout << "Destruct " << id << "\n";

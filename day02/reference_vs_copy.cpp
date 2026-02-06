@@ -21,6 +21,21 @@ struct Obj {
         std::cout << "Copy construct " << id << "\n";
     }
 
+    /*
+    // ❌ WRONG - Infinite recursion!
+    Obj(Obj other) : id(other.id) {
+        std::cout << "Copy construct " << id << "\n";
+    }
+
+    // When you do: Obj b = a;
+    // 1. Call copy constructor with 'a'
+    // 2. To pass 'a' by value, we need to... COPY it!
+    // 3. Which calls the copy constructor again
+    // 4. Which needs to copy 'a' again
+    // 5. Which calls the copy constructor...
+    // ∞ INFINITE LOOP! Stack overflow!
+    */
+
     // Destructor
     ~Obj() {
         std::cout << "Destruct " << id << "\n";
@@ -28,7 +43,9 @@ struct Obj {
 };
 
 // Function that takes an object by reference (no copy)
-void f(const Obj& o) {
+void f(const Obj& o) { // const to prevent modification
+    // o is just another name for the same object argument passed in
+    // No new object is created, no copy constructor called
     std::cout << "In f\n";
 }
 

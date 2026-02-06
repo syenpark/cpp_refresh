@@ -8,10 +8,12 @@ clang++ -std=c++20 -O1 -fsanitize=address move.cpp -o move_asan
 #include <vector>
 
 struct Obj {
+    // vector, not a single int anymore
+    // vector object on stack, vector's buffer to put valueson heap    
     std::vector<int> data;
 
     // Constructor
-    Obj(int n) : data(n) {
+    Obj(int n) : data(n) { // Creates vector of size n
         std::cout << "CTOR\n";
     }
 

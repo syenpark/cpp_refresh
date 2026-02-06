@@ -158,12 +158,12 @@ STACK:                               STACK:
                        │            │  Obj c:                      │
 HEAP:                  │            │    data → HEAP(A) ───┐       │
 ┌──────────────────────┼────────┐   │           size: 10   │       │
-│  (A) ◄────────────────┘       │   │           capacity: 10       │
+│  (A) ◄───────────────┘        │   │           capacity: 10       │
 │  [0][0][0][0][0][0][0][0][0][0]   └──────────────────────┼───────┘
 │                               │                          │
 └───────────────────────────────┘    HEAP:                 │
                                      ┌─────────────────────┼─────────┐
-                                     │  (A) ◄────────────────┘       │
+                                     │  (A) ◄──────────────┘         │
 std::move(a) casts 'a' to rvalue     │  [0][0][0][0][0][0][0][0][0][0]
       ↓                              │  └─ SAME buffer (not copied!) │
 Tells compiler: "I don't need        │     Ownership transferred     │
@@ -198,7 +198,7 @@ Inside make_elide():                 After return:
         ↓ return x                                        │
    NO COPY, NO MOVE!                   HEAP:              │
    Compiler builds 'x' where           ┌──────────────────┼────────────┐
-   'd' will live in main()             │  ◄─────────────────┘          │
+   'd' will live in main()             │  ◄───────────────┘            │
                                        │  [0][0][0][0][0][0][0][0][0][0]
 Output: "CTOR" (only one!)             └───────────────────────────────┘
 

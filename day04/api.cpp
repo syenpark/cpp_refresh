@@ -274,7 +274,7 @@ IF v.emplace_back(6) were called AND caused reallocation:
 │  Iterator it:                │
 │    ptr → 0x2000 ──────X      │    ⚠️ DANGLING!
 └──────────────────────────────┘    Old buffer freed!
-                                    
+
 HEAP (0x2000 - FREED):          HEAP (0x3000 - NEW):
 ┌──────────────────────────────┐ ┌──────────────────────────────┐
 │  ❌ DEALLOCATED MEMORY       │ │  [1][2][3][4][5][6]          │

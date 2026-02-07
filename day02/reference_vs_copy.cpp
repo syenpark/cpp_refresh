@@ -312,5 +312,5 @@ KEY INSIGHTS:
 3. For large objects (like vectors with lots of data):
    • Pass by reference: just 8 bytes overhead
    • Pass by value: copies ALL data (could be megabytes!)
-         
+
 */

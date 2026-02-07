@@ -1,6 +1,6 @@
 # C++ Refresh
 
-Brush up on C++ personally to be a real-time engineer in AI era. For fundamental jargon you must know, please visit[jargon.md](./docs/jargon.md).
+Brush up on C++ personally to be a real-time engineer in AI era. For fundamental jargon you must know, please visit [jargon.md](./docs/jargon.md).
 
 ## Battlefield
 

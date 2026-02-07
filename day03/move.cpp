@@ -9,7 +9,7 @@ clang++ -std=c++20 -O1 -fsanitize=address move.cpp -o move_asan
 
 struct Obj {
     // vector, not a single int anymore
-    // vector object on stack, vector's buffer to put valueson heap    
+    // vector object on stack, vector's buffer to put valueson heap
     std::vector<int> data;
 
     // Constructor
@@ -235,7 +235,7 @@ Step 1: Create temporary
 │    data → HEAP(T) ───┐       │
 └──────────────────────┼───────┘
                        │
-Step 2: Move to parameter       
+Step 2: Move to parameter
 ┌──────────────────────┼───────┐
 │  take_value() frame  │       │
 │  ┌───────────────────┼─────┐ │    Output: "MOVE"

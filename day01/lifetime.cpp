@@ -19,11 +19,11 @@ struct Obj {
         std::cout << "Construct " << id << "\n";
     }
 
-    /* 
+    /*
     initializer list version
     Step 1: Object allocation begins
     id is INITIALIZED directly with value i
-    
+
     STACK:
     ┌──────────────────────────┐
     │  Obj being constructed:  │
@@ -33,10 +33,10 @@ struct Obj {
     Step 2: Enter constructor body
     id already has correct value
     Print message
-    
+
     --
     vs initializer contructor body assignment version
-    
+
     Obj(int i) {
         id = i;
         std::cout << "Construct " << id << "\n";

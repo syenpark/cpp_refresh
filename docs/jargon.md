@@ -26,3 +26,34 @@ How long des one thing take? vs How many things per second?
 - `Jitter`
 
 Random variation in latency, which mostly from OS scheduling, memory allocation, cache misses, NUMA
+
+- `Cache miss`
+
+CPU wanted data, it wasn't in cache, which could result in CPU stalls and waits on RAM.
+
+- `False sharing`
+
+- Two cores write different variable on the same cache line, which could lead to cache ping-pong and massive latency spikes.
+
+- `Page fault`
+
+Memory page not mapped yet, so OS intervention with microseconds to millliseconds delay could occur.
+
+- `Memory locality`
+
+Data is physically close to the CPU that uses it. Speed levels are register > L1 > L2 > L3 > RAM (local) > RAM (remote NUMA).
+
+- `NUMA`
+
+Some RAM is farther from your core.
+
+- `Allocator`
+
+The system that decides where heap memory comes from.
+
+```cpp
+malloc
+new
+tcmalloc
+jemalloc
+```

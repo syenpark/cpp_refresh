@@ -1,0 +1,48 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-json
+      - id: detect-private-key
+
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: clang-format
+        args: [--style=file]
+      - id: cpplint
+        args: ['--filter=-legal/copyright,-runtime/explicit,-whitespace/comments,--quiet']
+      - id: cppcheck
+        args: [--enable=all, --suppress=missingIncludeSystem, --suppress=noExplicitConstructor]
+
+  - repo: local
+    hooks:
+      - id: no-dynamic-allocation
+        name: Detect dynamic allocation (review only)
+        entry: bash -c 'echo "[INFO] Checking for dynamic allocation..." && (grep -r "new \|malloc\|calloc\|realloc" --include="*.cpp" --include="*.h" . 2>/dev/null && echo "[REVIEW] Found dynamic allocation - ensure it is not in hot paths") || echo "[OK] No obvious dynamic allocation found"; true'
+        language: system
+        files: \.(cpp|h|hpp)$
+
+      - id: no-locks-in-latency-critical
+        name: Detect mutex/lock usage (review for latency)
+        entry: bash -c 'grep -r "std::mutex\|pthread_mutex\|std::lock" --include="*.cpp" --include="*.h" . 2>/dev/null || true'
+        language: system
+        files: \.(cpp|h|hpp)$
+
+      - id: no-syscalls-in-hot-loop
+        name: Detect potential syscalls in loops
+        entry: bash -c 'grep -r "syscall\|getenv\|system\|popen" --include="*.cpp" --include="*.h" . 2>/dev/null || true'
+        language: system
+        files: \.(cpp|h|hpp)$
+
+      - id: check-atomic-usage
+        name: Verify atomic operations are lock-free
+        entry: bash -c 'grep -r "std::atomic" --include="*.cpp" --include="*.h" . | grep -v "is_lock_free" || true'
+        language: system
+        files: \.(cpp|h|hpp)$

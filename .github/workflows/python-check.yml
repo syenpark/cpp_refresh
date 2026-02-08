@@ -1,0 +1,120 @@
+name: Python Code Quality
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "src/python/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/python-check.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "src/python/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/python-check.yml"
+
+jobs:
+  ruff-lint:
+    name: Ruff - Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Run ruff lint
+        run: uv run -- ruff check --force-exclude src/python
+
+  ruff-format:
+    name: Ruff - Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Check formatting
+        run: uv run -- ruff format --check --force-exclude src/python
+
+  mypy:
+    name: mypy - Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Run mypy
+        run: uv run -- mypy src/python
+
+  trailing-whitespace:
+    name: Trailing Whitespace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Check trailing whitespace
+        run: uv run -- trailing-whitespace-fixer --check src/python
+
+  end-of-file-fixer:
+    name: End of File Fixer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Check end of files
+        run: uv run -- end-of-file-fixer --check src/python
+
+  check-merge-conflict:
+    name: Check Merge Conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Check merge conflicts
+        run: uv run -- check-merge-conflict --assume-in-merge src/python

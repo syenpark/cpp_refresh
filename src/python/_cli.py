@@ -11,6 +11,7 @@ import typer
 
 from python.utils import config as custom_config
 from python.utils import logging as custom_logging
+from python.yolo.inference.metadata import run_simulation
 
 # Configure logging
 logger = custom_logging.SetLogger().logger
@@ -67,3 +68,5 @@ def main(
         logger.info("Store common configurations and invoke %s", ctx.invoked_subcommand)
 
         return
+
+    run_simulation(config_data["yolo"]["fps"])

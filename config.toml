@@ -1,0 +1,5 @@
+[yolo]
+fps = 25
+
+[zmq]
+port=5555

@@ -35,6 +35,9 @@ Brush up on C++ personally to be a real-time engineer in AI era. For fundamental
            ~80ns latency                         ~150ns latency
 ```
 
+How latency can grow...
+
+```shell
 Instruction →
     uses Registers →
         if miss → L1 →
@@ -42,6 +45,7 @@ Instruction →
                 miss → L3 →
                     miss → RAM (NUMA local?) →
                         miss → RAM (NUMA remote)
+```
 
 ## Topics
 

@@ -162,7 +162,6 @@
     |Detectability|Very hard|Hard|
     |Tail latency|High (p999 spike)|High (random latency)|
 
-
 - `Allocator`
 
     The system that decides where heap memory comes from.

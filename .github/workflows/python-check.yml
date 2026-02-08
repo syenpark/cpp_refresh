@@ -82,8 +82,15 @@ jobs:
         with:
           python-version-file: pyproject.toml
 
-      - name: Check trailing whitespace
-        run: uv run -- trailing-whitespace-fixer --check src/python
+      - name: Run trailing-whitespace-fixer
+        run: |
+          find src/python -type f \( -name "*.py" -o -name "*.pyi" \) | xargs uv run -- trailing-whitespace-fixer
+          if git diff --exit-code; then
+            echo "✓ No trailing whitespace found"
+          else
+            echo "✗ Trailing whitespace detected. Run: uv run -- trailing-whitespace-fixer to fix"
+            exit 1
+          fi
 
   end-of-file-fixer:
     name: End of File Fixer
@@ -99,8 +106,15 @@ jobs:
         with:
           python-version-file: pyproject.toml
 
-      - name: Check end of files
-        run: uv run -- end-of-file-fixer --check src/python
+      - name: Run end-of-file-fixer
+        run: |
+          find src/python -type f \( -name "*.py" -o -name "*.pyi" \) | xargs uv run -- end-of-file-fixer
+          if git diff --exit-code; then
+            echo "✓ All files end with newline"
+          else
+            echo "✗ Files missing final newline. Run: uv run -- end-of-file-fixer to fix"
+            exit 1
+          fi
 
   check-merge-conflict:
     name: Check Merge Conflicts

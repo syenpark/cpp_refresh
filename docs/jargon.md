@@ -132,7 +132,36 @@
     ────────                         ────────
     Core 0–15                        Core 16–31
     Local RAM 0                      Local RAM 1
+
+    # NUMA miss
+    Core 2 (Socket 0)
+        │
+        ▼
+    L1 ❌
+    L2 ❌
+    L3 ❌
+        │
+        ▼
+    RAM 0 ❌
+        │
+        ▼
+    RAM 1 (remote) 💀
+
+    # NUMA miss Timeline view
+    Time →
+    [ execute ][ WAIT WAIT WAIT ][ resume ]
     ```
+
+    `NUMA miss` is walking to another building (remote memory hop) vs `False sharing` is fighting over the same desk (cache line bouncing).
+
+    |Aspect|False sharing|NUMA Miss|
+    |------|---|---|
+    |RAM accessed|X|O|
+    |cause|Cache line sharing|Wrong memory node|
+    |Fix|Padding / alignment|Pin threads + memory|
+    |Detectability|Very hard|Hard|
+    |Tail latency|High (p999 spike)|High (random latency)|
+
 
 - `Allocator`
 

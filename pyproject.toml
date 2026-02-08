@@ -39,7 +39,7 @@ strict = true
 
 [tool.mypy]
 ignore_missing_imports = true
-mypy_path = ["src"]
+mypy_path = ["src/python"]
 namespace_packages = true
 explicit_package_bases = true
 exclude = [
@@ -54,10 +54,10 @@ addopts = "--cov --cov-report=term-missing"
 [tool.coverage.run]
 branch = true
 parallel = true
-source = ["python.yolo"]
+source = ["python"]
 
 [tool.coverage.paths]
-source = ["python.yolo"]
+source = ["python"]
 
 [tool.coverage.report]
 show_missing = true

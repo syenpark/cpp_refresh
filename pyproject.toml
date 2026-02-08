@@ -46,6 +46,7 @@ exclude = [
     "build/",
     "dist/",
     ".venv/",
+    "src/python/__main__.py",
 ]
 
 [tool.pytest.ini_options]

@@ -1,41 +1,85 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+### --- 1. C++ Compiled & Binary Files --- ###
+# Object files & Libraries
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
 *.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
 *.a
 *.lib
+*.dll
+*.dylib
+*.lo
+*.la
+*.slo
 
 # Executables
 *.exe
 *.out
 *.app
+*.exp
 
-# debug information files
+# Precompiled Headers
+*.gch
+*.pch
+
+### --- 2. C++ Build Systems & Debugging --- ###
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# Debugger & Profiling
+*.pdb
+*.idb
+*.dSYM/
+*.ilk
 *.dwo
+gmon.out
+
+# Prerequisites (Auto-generated headers)
+*.d
+
+### --- 3. Python Core & Byte-code --- ###
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+### --- 4. Environments & Dependencies (Python) --- ###
+.env
+.venv
+env/
+venv/
+build/
+dist/
+*.egg-info/
+.eggs/
+__pypackages__/
+
+### --- 5. Testing & Analysis (Combined) --- ###
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.google_test/
+
+### --- 6. IDE & Editors (VS, VS Code, CLion) --- ###
+.vscode/
+.idea/
+.vs/
+*.suo
+*.user
+*.sln
+*.vcproj
+*.vcxproj
+*.filters
+
+### --- 7. Data & Logs --- ###
+*.log
+db.sqlite3
+.ipynb_checkpoints/
+.DS_Store

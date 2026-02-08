@@ -23,6 +23,55 @@ repos:
 
   - repo: local
     hooks:
+      - id: ruff-lint
+        name: Ruff - Lint
+        entry: uv run -- ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: ruff-format
+        name: Ruff - Format code
+        entry: uv run -- ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: mypy
+        name: mypy - Check typing
+        entry: uv run -- mypy
+        language: system
+        require_serial: true
+        types: [python]
+
+      - id: uv-check-lock
+        name: uv - Check `uv.lock`
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^pyproject\.toml|uv\.lock$
+
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        entry: uv run -- trailing-whitespace-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+
+      - id: end-of-file-fixer
+        name: Fix end of files
+        entry: uv run -- end-of-file-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+        entry: uv run -- check-merge-conflict
+        args: [--assume-in-merge]
+        language: system
+        types: [text]
+
       - id: no-dynamic-allocation
         name: Detect dynamic allocation (review only)
         entry: bash -c 'echo "[INFO] Checking for dynamic allocation..." && (grep -r "new \|malloc\|calloc\|realloc" --include="*.cpp" --include="*.h" . 2>/dev/null && echo "[REVIEW] Found dynamic allocation - ensure it is not in hot paths") || echo "[OK] No obvious dynamic allocation found"; true'

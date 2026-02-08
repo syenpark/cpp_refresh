@@ -49,10 +49,10 @@ Instruction →
 
 ## Topics
 
-[day01](./day01/): stack vs heap
-[day02](./day02/): reference vs copy
-[day03](./day03/): elide vs move vs copy
-[day04](./day04/): STL Containers & API Design
+[day01](./src/cpp/day01/): stack vs heap
+[day02](./src/cpp/day02/): reference vs copy
+[day03](./src/cpp/day03/): elide vs move vs copy
+[day04](./src/cpp/day04/): STL Containers & API Design
 
 ## Allocators & Cache Behavior (Day 05)
 

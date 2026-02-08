@@ -131,4 +131,4 @@ jobs:
           python-version-file: pyproject.toml
 
       - name: Check merge conflicts
-        run: uv run -- check-merge-conflict --assume-in-merge src/python
+        run: uv run -- check-merge-conflict --assume-in-merge $(find src/python -type f -name "*.py")

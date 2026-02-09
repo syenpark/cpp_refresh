@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
+from typing import Any
 
 import psutil
 
@@ -165,7 +166,7 @@ class PerformanceMetrics:
             "hit_rate": hit_rate,
         }
 
-    def get_all_metrics(self) -> dict[str, dict | float | int]:
+    def get_all_metrics(self) -> dict[str, Any]:
         """Get all metrics as a dictionary.
 
         Returns:

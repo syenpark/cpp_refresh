@@ -6,6 +6,7 @@ import json
 import logging
 import time
 from collections import defaultdict
+from typing import Any
 
 import zmq
 
@@ -21,8 +22,8 @@ def log_analytics_summary(
     interval_frame_count: int,
     frame_count: int,
     total_objects: int,
-    unique_track_ids: set,
-    class_counts: dict,
+    unique_track_ids: set[int],
+    class_counts: dict[int, int],
 ) -> None:
     """Log periodic analytics summary.
 
@@ -52,7 +53,7 @@ def log_analytics_summary(
 def log_final_summary(
     frame_count: int,
     total_objects: int,
-    unique_track_ids: set,
+    unique_track_ids: set[int],
 ) -> None:
     """Log final analytics summary on exit.
 
@@ -72,8 +73,8 @@ def log_final_summary(
 
 
 def process_detections(
-    detections: list,
-    unique_track_ids: set,
+    detections: list[dict[str, Any]],
+    unique_track_ids: set[int],
     class_counts: defaultdict[int, int],
     metrics: PerformanceMetrics | None,
     track_id_cache: set[int],
@@ -162,7 +163,7 @@ def receive_and_analyze_metadata(
     # Analytics tracking
     frame_count = 0
     total_objects = 0
-    unique_track_ids = set()
+    unique_track_ids: set[int] = set()
     class_counts: defaultdict[int, int] = defaultdict(int)
     interval_start_time = time.time()
     interval_frame_count = 0

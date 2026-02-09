@@ -157,3 +157,6 @@ The Python implementation will serve as a reference for the [analytics](./src/py
 ```
 
 More details, please check [./src/python/yolo/inference/README.md](./src/python/yolo/inference/README.md) for inference container, [./src/python/yolo/analytics/README.md](./src/python/yolo/analytics/README.md) for analytics container written in Python.
+
+> [!IMPORTANT]
+[./src/cpp](./src/cpp/) for the analytic container in C++, which is the main part in this repository.

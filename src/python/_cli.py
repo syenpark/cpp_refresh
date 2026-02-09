@@ -89,6 +89,10 @@ def inference(
 @app.command("analytics")
 def analytics(
     ctx: typer.Context,
+    *,
+    enable_metrics: Annotated[
+        bool, typer.Option("--metrics", help="Enable performance metrics tracking")
+    ] = False,
 ) -> None:
     """Receive and analyze inference metadata via ZeroMQ."""
     # Reuse exactly the same options without redefining them
@@ -101,4 +105,5 @@ def analytics(
     receive_and_analyze_metadata(
         port=config_data["zmq"].get("port", 5555),
         analytics_interval_sec=config_data["stream"].get("fps_check_interval_sec", 10),
+        enable_performance_metrics=enable_metrics,
     )

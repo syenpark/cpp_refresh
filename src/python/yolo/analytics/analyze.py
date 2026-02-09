@@ -9,6 +9,8 @@ from collections import defaultdict
 
 import zmq
 
+from python.yolo.analytics.metrics import PerformanceMetrics
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,15 +69,18 @@ def log_final_summary(
         logger.info("  Avg objects per frame: %.2f", avg_objects)
 
 
-def receive_and_analyze_metadata(
+def receive_and_analyze_metadata(  # noqa: C901, PLR0915, PLR0912 - Complex main loop
     port: int = 5555,
     analytics_interval_sec: int = 10,
+    *,
+    enable_performance_metrics: bool = False,
 ) -> None:
     """Receive inference metadata via ZeroMQ and perform analytics.
 
     Args:
         port: ZeroMQ subscriber port to connect to
         analytics_interval_sec: Interval in seconds to log analytics summary
+        enable_performance_metrics: Enable detailed performance metrics tracking
     """
     # Initialize ZeroMQ SUB socket
     context = zmq.Context()
@@ -88,6 +93,9 @@ def receive_and_analyze_metadata(
     logger.info("📊 Receiving Inference Metadata via ZeroMQ (Ctrl+C to stop)...")
     logger.info("📊 Subscribed to tcp://localhost:%s", port)
 
+    if enable_performance_metrics:
+        logger.info("🔍 Performance metrics enabled")
+
     # Analytics tracking
     frame_count = 0
     total_objects = 0
@@ -96,8 +104,17 @@ def receive_and_analyze_metadata(
     interval_start_time = time.time()
     interval_frame_count = 0
 
+    # Performance metrics
+    metrics = PerformanceMetrics() if enable_performance_metrics else None
+
+    # Track cache for seen track IDs (for cache hit/miss tracking)
+    track_id_cache: set[int] = set()
+
     try:
         while True:
+            if metrics:
+                metrics.start_frame()
+
             # Receive message
             _topic, message = socket.recv_multipart()
             metadata = json.loads(message.decode("utf-8"))
@@ -119,6 +136,15 @@ def receive_and_analyze_metadata(
                 for detection in detections:
                     track_id = detection["track_id"]
                     class_id = detection["class_id"]
+
+                    # Track cache hits/misses for track IDs
+                    if metrics:
+                        if track_id in track_id_cache:
+                            metrics.record_cache_hit()
+                        else:
+                            metrics.record_cache_miss()
+                            track_id_cache.add(track_id)
+
                     unique_track_ids.add(track_id)
                     class_counts[class_id] += 1
 
@@ -129,6 +155,9 @@ def receive_and_analyze_metadata(
                         detection["confidence"],
                         detection["frame_num"],
                     )
+
+            if metrics:
+                metrics.end_frame()
 
             # Log analytics summary periodically
             current_time = time.time()
@@ -144,6 +173,10 @@ def receive_and_analyze_metadata(
                     class_counts,
                 )
 
+                # Log performance metrics if enabled
+                if metrics:
+                    metrics.log_metrics()
+
                 # Reset interval counters
                 interval_start_time = current_time
                 interval_frame_count = 0
@@ -153,6 +186,12 @@ def receive_and_analyze_metadata(
     finally:
         # Final summary
         log_final_summary(frame_count, total_objects, unique_track_ids)
+
+        # Final performance metrics
+        if metrics:
+            logger.info("")
+            logger.info("🔍 Final Performance Metrics")
+            metrics.log_metrics()
 
         socket.close()
         context.term()

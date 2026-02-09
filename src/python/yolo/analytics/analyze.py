@@ -13,8 +13,10 @@ from python.yolo.analytics.metrics import PerformanceMetrics
 
 logger = logging.getLogger(__name__)
 
+# ruff: noqa: PLR0913 - All params needed for analytics
 
-def log_analytics_summary(  # noqa: PLR0913 - All params needed for analytics
+
+def log_analytics_summary(
     elapsed: float,
     interval_frame_count: int,
     frame_count: int,
@@ -69,7 +71,68 @@ def log_final_summary(
         logger.info("  Avg objects per frame: %.2f", avg_objects)
 
 
-def receive_and_analyze_metadata(  # noqa: C901, PLR0915, PLR0912 - Complex main loop
+def process_detections(
+    detections: list,
+    unique_track_ids: set,
+    class_counts: defaultdict[int, int],
+    metrics: PerformanceMetrics | None,
+    track_id_cache: set[int],
+) -> int:
+    """Process detections from a single frame.
+
+    Args:
+        detections: List of detection dictionaries
+        unique_track_ids: Set to track unique track IDs
+        class_counts: Counter for class distribution
+        metrics: Optional performance metrics tracker
+        track_id_cache: Cache for tracking seen track IDs
+
+    Returns:
+        Number of objects in the frame
+    """
+    for detection in detections:
+        track_id = detection["track_id"]
+        class_id = detection["class_id"]
+
+        # Track cache hits/misses for track IDs
+        if metrics:
+            if track_id in track_id_cache:
+                metrics.record_cache_hit()
+            else:
+                metrics.record_cache_miss()
+                track_id_cache.add(track_id)
+
+        unique_track_ids.add(track_id)
+        class_counts[class_id] += 1
+
+        logger.debug(
+            "  └─ Track ID %s (class_id=%s) | Confidence: %.2f | Frame: %s",
+            track_id,
+            class_id,
+            detection["confidence"],
+            detection["frame_num"],
+        )
+
+    return len(detections)
+
+
+def should_log_summary(
+    current_time: float, interval_start: float, interval_sec: int
+) -> bool:
+    """Check if it's time to log the analytics summary.
+
+    Args:
+        current_time: Current timestamp
+        interval_start: Start time of the interval
+        interval_sec: Interval duration in seconds
+
+    Returns:
+        True if summary should be logged
+    """
+    return (current_time - interval_start) >= interval_sec
+
+
+def receive_and_analyze_metadata(
     port: int = 5555,
     analytics_interval_sec: int = 10,
     *,
@@ -123,47 +186,35 @@ def receive_and_analyze_metadata(  # noqa: C901, PLR0915, PLR0912 - Complex main
             for source_id, detections in metadata.items():
                 frame_count += 1
                 interval_frame_count += 1
-                frame_object_count = len(detections)
-                total_objects += frame_object_count
 
                 logger.debug(
                     "[Source %s] Frame %d: %d objects",
                     source_id,
                     frame_count,
-                    frame_object_count,
+                    len(detections),
                 )
 
-                for detection in detections:
-                    track_id = detection["track_id"]
-                    class_id = detection["class_id"]
-
-                    # Track cache hits/misses for track IDs
-                    if metrics:
-                        if track_id in track_id_cache:
-                            metrics.record_cache_hit()
-                        else:
-                            metrics.record_cache_miss()
-                            track_id_cache.add(track_id)
-
-                    unique_track_ids.add(track_id)
-                    class_counts[class_id] += 1
-
-                    logger.debug(
-                        "  └─ Track ID %s (class_id=%s) | Confidence: %.2f | Frame: %s",
-                        track_id,
-                        class_id,
-                        detection["confidence"],
-                        detection["frame_num"],
-                    )
+                # Process all detections
+                frame_object_count = process_detections(
+                    detections,
+                    unique_track_ids,
+                    class_counts,
+                    metrics,
+                    track_id_cache,
+                )
+                total_objects += frame_object_count
 
             if metrics:
                 metrics.end_frame()
 
             # Log analytics summary periodically
             current_time = time.time()
-            elapsed = current_time - interval_start_time
 
-            if elapsed >= analytics_interval_sec:
+            if should_log_summary(
+                current_time, interval_start_time, analytics_interval_sec
+            ):
+                elapsed = current_time - interval_start_time
+
                 log_analytics_summary(
                     elapsed,
                     interval_frame_count,

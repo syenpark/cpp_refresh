@@ -4,12 +4,12 @@ I'm currently brushing up on my C++ skills to prepare for a career as a real-tim
 
 ## Contents
 
-- [Battlefield](#battlefield)
-- [Topics](#topics)
-- [Allocators & Cache Behavior (Day 05)](#allocators--cache-behavior-day-05)
-- [Practical Application: Video Analytics](#practical-application-video-analytics)
+- [Battlefield](#battlefield-)
+- [Topics](#topics-)
+- [Allocators & Cache Behavior (Day 05)](#allocators--cache-behavior-day-05-)
+- [Practical Application: Video Analytics](#practical-application-video-analytics-)
 
-## Battlefield
+## Battlefield [↑](#contents)
 
 <details>
 <summary> Click to expand/collapse </summary>
@@ -59,14 +59,14 @@ Instruction →
 
 </details>
 
-## Topics
+## Topics [↑](#contents)
 
 - [day01](./src/cpp/day01/): stack vs heap
 - [day02](./src/cpp/day02/): reference vs copy
 - [day03](./src/cpp/day03/): elide vs move vs copy
 - [day04](./src/cpp/day04/): STL Containers & API Design
 
-## Allocators & Cache Behavior (Day 05)
+## Allocators & Cache Behavior (Day 05) [↑](#contents)
 
 <details>
 <summary> Click to expand/collapse </summary>
@@ -131,7 +131,7 @@ Group hot data together.
 
 </details>
 
-## Practical Application: Video Analytics
+## Practical Application: Video Analytics [↑](#contents)
 
 Based on my experience, fine-tuning pre-trained AI models for specific applications is becoming increasingly straightforward, thanks to the optimization of inference frameworks, particularly on GPUs.
 

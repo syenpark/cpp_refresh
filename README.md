@@ -133,16 +133,16 @@ Group hot data together.
 
 ## Practical Application: Video Analytics
 
-Based on my experience, fine-tuning pre-trained AI models for specific applications is becoming increasingly straightforward, thanks to the optimization of inference frameworks, particularly on GPUs.  
-  
-As model inference becomes faster and more efficient, the true bottleneck often shifts to data flow and real-time decision-making within the Python-based container. Python's inherent inefficiencies in the post-processing layer, especially on hot paths, can significantly hinder performance.  
-  
-In AI-heavy applications—such as video streaming, autonomous driving, smart cities, and trading—optimizing everything beyond inference is critical. C++ plays a key role in eliminating these inefficiencies and squeezing out those final milliseconds. Therefore, I will simulate the Python hot path for processing object detection metadata and re-implement it in C++ to achieve the performance gains needed for real-time applications.  
+Based on my experience, fine-tuning pre-trained AI models for specific applications is becoming increasingly straightforward, thanks to the optimization of inference frameworks, particularly on GPUs.
 
-The directory [./src/python/yolo/inference](./src/python/yolo/inference/) will simulate Ultralytics YOLO's inference and generate dummy metadata, which is used in the analytics layer (In real-world applications, this metadata loop is handled by NVIDIA DeepStream, which is highly optimized).  
-  
-The Python implementation will serve as a reference for the [analytics](./src/python/yolo/analytics/) pipeline, which I will later re-implement in C++ to optimize the performance of time-critical operations in real-time systems.  
-  
+As model inference becomes faster and more efficient, the true bottleneck often shifts to data flow and real-time decision-making within the Python-based container. Python's inherent inefficiencies in the post-processing layer, especially on hot paths, can significantly hinder performance.
+
+In AI-heavy applications—such as video streaming, autonomous driving, smart cities, and trading—optimizing everything beyond inference is critical. C++ plays a key role in eliminating these inefficiencies and squeezing out those final milliseconds. Therefore, I will simulate the Python hot path for processing object detection metadata and re-implement it in C++ to achieve the performance gains needed for real-time applications.
+
+The directory [./src/python/yolo/inference](./src/python/yolo/inference/) will simulate Ultralytics YOLO's inference and generate dummy metadata, which is used in the analytics layer (In real-world applications, this metadata loop is handled by NVIDIA DeepStream, which is highly optimized).
+
+The Python implementation will serve as a reference for the [analytics](./src/python/yolo/analytics/) pipeline, which I will later re-implement in C++ to optimize the performance of time-critical operations in real-time systems.
+
 ```shell
 # Inference container is just to simulate metadata generation in quicik.
 # In real world applications, I used the highly optimized NVIDIA DeepStream.
@@ -156,3 +156,4 @@ The Python implementation will serve as a reference for the [analytics](./src/py
 +----------------------------+        +----------------------+
 ```
 
+More details, please check [./src/python/yolo/inference/README.md](./src/python/yolo/inference/README.md) for inference container, [./src/python/yolo/analytics/README.md](./src/python/yolo/analytics/README.md) for analytics container written in Python.

@@ -4,5 +4,10 @@ source_id = 0
 uri = "rtsp://camera/stream"
 fps_check_interval_sec=10
 
+[simulation]
+# Constants for simulation probabilities
+new_object_probability = 0.1
+object_exit_probability = 0.05
+
 [zmq]
 port = 5555

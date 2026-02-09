@@ -17,9 +17,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ruff: noqa: S311 - Allow use of random for simulation purposes
-# Constants for simulation probabilities
-NEW_OBJECT_PROBABILITY = 0.1
-OBJECT_EXIT_PROBABILITY = 0.05
 
 
 def rect_params_to_dict(left: float, top: float, width: float, height: float) -> dict:
@@ -67,7 +64,10 @@ def send_metadata(
 
 
 def live_stream_tracker_simulation(
-    fps: int = 30, uri: str = "rtsp://camera/stream"
+    fps: int = 30,
+    uri: str = "rtsp://camera/stream",
+    new_object_probability: float = 0.1,
+    object_exit_probability: float = 0.05,
 ) -> Generator[dict[str, Any]]:
     """Infinite generator simulating a YOLO live tracking stream.
 
@@ -82,7 +82,7 @@ def live_stream_tracker_simulation(
         start_time = time.perf_counter()
 
         # 1. Randomly add a new object (simulating someone entering the scene)
-        if random.random() < NEW_OBJECT_PROBABILITY:
+        if random.random() < new_object_probability:
             new_id = random.randint(100, 999)
             active_tracks[new_id] = [
                 random.randint(0, 500),
@@ -121,7 +121,7 @@ def live_stream_tracker_simulation(
             frame_detections.append(obj_meta)
 
             # 5% chance an object leaves the frame
-            if random.random() < OBJECT_EXIT_PROBABILITY:
+            if random.random() < object_exit_probability:
                 to_remove.append(tid)
 
         for tid in to_remove:
@@ -140,13 +140,22 @@ def live_stream_tracker_simulation(
 
 
 def run_simulation(
-    fps: int = 30,
-    source_id: int = 0,
-    uri: str = "rtsp://camera/stream",
-    port: int = 5555,
-    fps_check_interval_sec: int = 10,
+    config_data: dict[str, Any],
 ) -> None:
     """Run the live stream tracker simulation and send via ZeroMQ."""
+    # Extract configuration parameters
+    fps = config_data["stream"]["fps"]
+    source_id = config_data["stream"].get("source_id", 0)
+    uri = config_data["stream"].get("uri", "rtsp://camera/stream")
+    port = config_data["zmq"].get("port", 5555)
+    fps_check_interval_sec = config_data["stream"].get("fps_interval_sec", 10)
+    new_object_probability = config_data["simulation"].get(
+        "new_object_probability", 0.1
+    )
+    object_exit_probability = config_data["simulation"].get(
+        "object_exit_probability", 0.05
+    )
+
     # Initialize ZeroMQ PUB socket
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
@@ -160,7 +169,12 @@ def run_simulation(
     interval_frame_count = 0
 
     try:
-        for metadata in live_stream_tracker_simulation(fps=fps, uri=uri):
+        for metadata in live_stream_tracker_simulation(
+            fps=fps,
+            uri=uri,
+            new_object_probability=new_object_probability,
+            object_exit_probability=object_exit_probability,
+        ):
             # Send metadata via ZeroMQ
             send_metadata(
                 socket=socket,

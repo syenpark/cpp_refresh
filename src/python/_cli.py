@@ -80,11 +80,6 @@ def inference(
 
     config_data = common_args.config_data
     logger.debug("Starting inference simulation with config: %s", config_data)
+
     # Run the default simulation
-    run_simulation(
-        fps=config_data["stream"]["fps"],
-        source_id=config_data["stream"].get("source_id", 0),
-        uri=config_data["stream"].get("uri", "rtsp://camera/stream"),
-        port=config_data["zmq"].get("port", 5555),
-        fps_check_interval_sec=config_data["stream"].get("fps_interval_sec", 10),
-    )
+    run_simulation(config_data)

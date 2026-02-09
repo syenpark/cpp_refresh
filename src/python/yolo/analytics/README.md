@@ -54,6 +54,13 @@ uv run dummy_yolo analytics
 uv run dummy_yolo --debug analytics
 ```
 
+### With Performance Metrics
+
+```bash
+# Enable detailed performance metrics tracking (FPS, latency, memory, CPU, cache stats)
+uv run dummy_yolo --metrics analytics
+```
+
 ### With Custom Configuration
 
 ```bash
@@ -75,7 +82,7 @@ port = 5555                  # ZeroMQ subscriber port
 
 ## Metrics Tracked
 
-### Real-time Metrics
+### Analytics Metrics (Always Tracked)
 
 | Metric | Description |
 | ------ | ----------- |
@@ -84,6 +91,19 @@ port = 5555                  # ZeroMQ subscriber port
 | **Total objects tracked** | Number of unique track IDs observed |
 | **Avg objects per frame** | Mean number of detections per frame |
 | **Class distribution** | Count of detections per class ID |
+
+### Performance Metrics (With `--metrics` flag)
+
+When enabled with `--metrics`, detailed performance metrics are logged periodically:
+
+| Metric | Description |
+| ------ | ----------- |
+| **FPS (Current/Average)** | Real-time and average frames per second |
+| **Latency** | Min, max, average, P95, and P99 frame processing time (ms) |
+| **Memory (RSS/VMS)** | Resident Set Size and Virtual Memory Size in MB |
+| **CPU Usage** | Process CPU utilization percentage |
+| **Cache Stats** | Hit/miss counts and hit rate for internal data lookups |
+| **Uptime** | Total runtime in seconds |
 
 ### Example Output
 
@@ -116,6 +136,22 @@ With `--debug` enabled, you'll see detailed per-detection logs:
   └─ Track ID 234 (class_id=0) | Confidence: 0.91 | Frame: 2
   └─ Track ID 456 (class_id=1) | Confidence: 0.89 | Frame: 2
   └─ Track ID 789 (class_id=2) | Confidence: 0.94 | Frame: 2
+```
+
+### Performance Metrics Output
+
+With `--metrics` enabled, you'll see periodic performance metrics summaries:
+
+```text
+🔍 Performance Metrics
+----------------------------------------------------------------------
+FPS: Current=25.30 | Average=24.95
+Latency (ms): Min=35.42 | Avg=38.64 | P95=42.15 | P99=45.33 | Max=52.18
+Memory: RSS=156.32 MB | VMS=2841.64 MB
+CPU Usage: 18.50%
+Cache: Hits=1245 | Misses=89 | Hit Rate=93.34%
+Summary: 250 frames in 10.0 seconds
+======================================================================
 ```
 
 ## Metadata Format
@@ -167,7 +203,17 @@ uv run dummy_yolo --debug analytics
 
 Look at "Total objects tracked" to understand scene occupancy.
 
-### 3. Class Distribution Analysis
+### 3. Performance Analysis
+
+Monitor detailed performance metrics including latency, memory, and CPU:
+
+```bash
+uv run dummy_yolo --metrics analytics
+```
+
+Use this to identify bottlenecks and monitor resource consumption over time.
+
+### 4. Class Distribution Analysis
 
 Understand which object classes are most commonly detected:
 
@@ -177,7 +223,7 @@ uv run dummy_yolo analytics
 
 Review the "Class distribution" section in periodic summaries.
 
-### 4. System Integration Testing
+### 5. System Integration Testing
 
 Verify end-to-end data flow from inference to analytics:
 

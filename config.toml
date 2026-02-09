@@ -2,6 +2,7 @@
 fps = 25
 source_id = 0
 uri = "rtsp://camera/stream"
+fps_check_interval_sec=10
 
 [zmq]
 port = 5555

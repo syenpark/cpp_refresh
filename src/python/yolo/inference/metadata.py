@@ -144,6 +144,7 @@ def run_simulation(
     source_id: int = 0,
     uri: str = "rtsp://camera/stream",
     port: int = 5555,
+    fps_check_interval_sec: int = 10,
 ) -> None:
     """Run the live stream tracker simulation and send via ZeroMQ."""
     # Initialize ZeroMQ PUB socket
@@ -154,6 +155,10 @@ def run_simulation(
     logger.info("📡 Sending Live Stream Metadata via ZeroMQ (Ctrl+C to stop)...")
     logger.info("📡 Publishing on tcp://*:%s", port)
 
+    # FPS tracking
+    interval_start_time = time.time()
+    interval_frame_count = 0
+
     try:
         for metadata in live_stream_tracker_simulation(fps=fps, uri=uri):
             # Send metadata via ZeroMQ
@@ -162,6 +167,24 @@ def run_simulation(
                 source_id=source_id,
                 frame_objects=metadata["detections"],
             )
+
+            # Track FPS
+            interval_frame_count += 1
+            current_time = time.time()
+            elapsed = current_time - interval_start_time
+
+            # Log average FPS every 10 seconds
+            if elapsed >= fps_check_interval_sec:
+                avg_fps = interval_frame_count / elapsed
+                logger.info(
+                    "📊 Average FPS: %.2f/%02d (over %.1f seconds)",
+                    avg_fps,
+                    fps,
+                    elapsed,
+                )
+                # Reset counters
+                interval_start_time = current_time
+                interval_frame_count = 0
 
             logger.debug(
                 "[Frame %s] Active Objects: %s",

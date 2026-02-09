@@ -1,5 +1,7 @@
-[yolo]
+[stream]
 fps = 25
+source_id = 0
+uri = "rtsp://camera/stream"
 
 [zmq]
-port=5555
+port = 5555

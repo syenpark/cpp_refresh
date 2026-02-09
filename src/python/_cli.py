@@ -69,5 +69,21 @@ def main(
 
         return
 
+
+@app.command("inference")
+def inference(
+    ctx: typer.Context,
+) -> None:
+    """Simulate inference metadata sending via ZeroMQ."""
+    # Reuse exactly the same options without redefining them
+    common_args: CommonArgs = ctx.obj
+
+    config_data = common_args.config_data
+    logger.debug("Starting inference simulation with config: %s", config_data)
     # Run the default simulation
-    run_simulation(config_data["yolo"]["fps"])
+    run_simulation(
+        fps=config_data["stream"]["fps"],
+        source_id=config_data["stream"].get("source_id", 0),
+        uri=config_data["stream"].get("uri", "rtsp://camera/stream"),
+        port=config_data["zmq"].get("port", 5555),
+    )

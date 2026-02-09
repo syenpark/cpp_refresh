@@ -11,6 +11,7 @@ import typer
 
 from python.utils import config as custom_config
 from python.utils import logging as custom_logging
+from python.yolo.analytics.analyze import receive_and_analyze_metadata
 from python.yolo.inference.metadata import run_simulation
 
 # Configure logging
@@ -83,3 +84,21 @@ def inference(
 
     # Run the default simulation
     run_simulation(config_data)
+
+
+@app.command("analytics")
+def analytics(
+    ctx: typer.Context,
+) -> None:
+    """Receive and analyze inference metadata via ZeroMQ."""
+    # Reuse exactly the same options without redefining them
+    common_args: CommonArgs = ctx.obj
+
+    config_data = common_args.config_data
+    logger.debug("Starting analytics receiver with config: %s", config_data)
+
+    # Receive and analyze metadata
+    receive_and_analyze_metadata(
+        port=config_data["zmq"].get("port", 5555),
+        analytics_interval_sec=config_data["stream"].get("fps_check_interval_sec", 10),
+    )

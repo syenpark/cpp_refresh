@@ -69,4 +69,5 @@ def main(
 
         return
 
+    # Run the default simulation
     run_simulation(config_data["yolo"]["fps"])

@@ -1,8 +1,18 @@
 # C++ Refresh
 
-Brush up on C++ personally to be a real-time engineer in AI era. For fundamental jargon you must know, please visit [jargon.md](./docs/jargon.md).
+I'm currently brushing up on my C++ skills to prepare for a career as a real-time engineer in the age of AI. Check out [jargon.md](./docs/jargon.md) for the fundamental terms you'll need to know.
+
+## Contents
+
+- [Battlefield](#battlefield)
+- [Topics](#topics)
+- [Allocators & Cache Behavior (Day 05)](#allocators--cache-behavior-day-05)
+- [Practical Application: Video Analytics](#practical-application-video-analytics)
 
 ## Battlefield
+
+<details>
+<summary> Click to expand/collapse </summary>
 
 ```shell
                     ┌──────────────────────────────┐
@@ -26,13 +36,13 @@ Brush up on C++ personally to be a real-time engineer in AI era. For fundamental
                     │  │   (Shared, MBs)        │  │           Bigger and slower than L2
                     │  └────────────────────────┘  │
                     └──────────────┬───────────────┘
-                                   │
-                          Local Memory Controller
-                                   │
+                                │
+                        Local Memory Controller
+                                │
                 ┌──────────────────┴──────────────────┐
                 │                                     │
-          RAM (NUMA Node 0)                     RAM (NUMA Node 1)
-           ~80ns latency                         ~150ns latency
+        RAM (NUMA Node 0)                     RAM (NUMA Node 1)
+        ~80ns latency                         ~150ns latency
 ```
 
 How latency can grow...
@@ -47,14 +57,19 @@ Instruction →
                         miss → RAM (NUMA remote)
 ```
 
+</details>
+
 ## Topics
 
-[day01](./src/cpp/day01/): stack vs heap
-[day02](./src/cpp/day02/): reference vs copy
-[day03](./src/cpp/day03/): elide vs move vs copy
-[day04](./src/cpp/day04/): STL Containers & API Design
+- [day01](./src/cpp/day01/): stack vs heap
+- [day02](./src/cpp/day02/): reference vs copy
+- [day03](./src/cpp/day03/): elide vs move vs copy
+- [day04](./src/cpp/day04/): STL Containers & API Design
 
 ## Allocators & Cache Behavior (Day 05)
+
+<details>
+<summary> Click to expand/collapse </summary>
 
 ### What an allocator actually is
 
@@ -113,3 +128,31 @@ struct Good {
 ```
 
 Group hot data together.
+
+</details>
+
+## Practical Application: Video Analytics
+
+Based on my experience, fine-tuning pre-trained AI models for specific applications is becoming increasingly straightforward, thanks to the optimization of inference frameworks, particularly on GPUs.  
+  
+As model inference becomes faster and more efficient, the true bottleneck often shifts to data flow and real-time decision-making within the Python-based container. Python's inherent inefficiencies in the post-processing layer, especially on hot paths, can significantly hinder performance.  
+  
+In AI-heavy applications—such as video streaming, autonomous driving, smart cities, and trading—optimizing everything beyond inference is critical. C++ plays a key role in eliminating these inefficiencies and squeezing out those final milliseconds. Therefore, I will simulate the Python hot path for processing object detection metadata and re-implement it in C++ to achieve the performance gains needed for real-time applications.  
+
+The directory [./src/python/yolo/inference](./src/python/yolo/inference/) will simulate Ultralytics YOLO's inference and generate dummy metadata, which is used in the analytics layer (In real-world applications, this metadata loop is handled by NVIDIA DeepStream, which is highly optimized).  
+  
+The Python implementation will serve as a reference for the [analytics](./src/python/yolo/analytics/) pipeline, which I will later re-implement in C++ to optimize the performance of time-critical operations in real-time systems.  
+  
+```shell
+# Inference container is just to simulate metadata generation in quicik.
+# In real world applications, I used the highly optimized NVIDIA DeepStream.
++----------------------------+        +----------------------+
+|   Inference Container      |        |  Analytics Container | : This is where I will re-write
+|  (Dummy Ultralytics YOLO)  |        | (Processing Metadata)|
+|                            |        |                      |
+|  - Pretend YOLO Inference  |        | - Process Metadata   |
+|  - Generate Dummy Metadata |  ----> | - Analytics Logic    |
+|                            |        |                      |
++----------------------------+        +----------------------+
+```
+

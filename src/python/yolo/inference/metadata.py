@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 import time
 from typing import TYPE_CHECKING
 from typing import Any
+
+import zmq
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -19,12 +22,60 @@ NEW_OBJECT_PROBABILITY = 0.1
 OBJECT_EXIT_PROBABILITY = 0.05
 
 
-def live_stream_tracker_simulation(fps: int = 30) -> Generator[dict[str, Any]]:
-    """Infinite generator simulating a YOLO live tracking stream."""
+def rect_params_to_dict(left: float, top: float, width: float, height: float) -> dict:
+    """Convert rectangle parameters to JSON serializable dict."""
+    return {
+        "left": left,
+        "top": top,
+        "width": width,
+        "height": height,
+        "border_width": 0,
+        "has_bg_color": 0,
+    }
+
+
+def format_obj_meta(  # noqa: PLR0913 - Mimicking DeepStream API structure
+    uri: str,
+    frame_num: int,
+    track_id: int,
+    class_id: int,
+    confidence: float,
+    bbox: dict,
+) -> dict:
+    """Format object metadata to json to send.
+
+    Mimics DeepStream NvDsObjectMeta structure.
+    """
+    return {
+        "uri": uri,
+        "class_id": class_id,
+        "track_id": track_id,
+        "confidence": confidence,
+        "bbox": bbox,
+        "frame_num": frame_num,
+    }
+
+
+def send_metadata(
+    socket: zmq.Socket,
+    source_id: int,
+    frame_objects: list[dict[str, Any]],
+) -> None:
+    """Send metadata via ZeroMQ (PUB socket)."""
+    metadata = {source_id: frame_objects}
+    socket.send_multipart([b"inference", json.dumps(metadata).encode("utf-8")])
+
+
+def live_stream_tracker_simulation(
+    fps: int = 30, uri: str = "rtsp://camera/stream"
+) -> Generator[dict[str, Any]]:
+    """Infinite generator simulating a YOLO live tracking stream.
+
+    Uses DeepStream-like metadata format.
+    """
     # Active tracks: {track_id: [x, y, w, h, class_id]}
     active_tracks = {}
     frame_count = 0
-    labels = ["person", "bicycle", "car"]
 
     while True:
         frame_count += 1
@@ -50,20 +101,24 @@ def live_stream_tracker_simulation(fps: int = 30) -> Generator[dict[str, Any]]:
             coords[0] += random.randint(-3, 3)
             coords[1] += random.randint(-3, 3)
 
-            # Package into YOLO inference metadata format
-            frame_detections.append(
-                {
-                    "track_id": tid,
-                    "box_xyxy": [
-                        coords[0],
-                        coords[1],
-                        coords[0] + coords[2],
-                        coords[1] + coords[3],
-                    ],
-                    "conf": round(random.uniform(0.8, 0.98), 2),
-                    "label": labels[coords[4]],
-                }
+            # Format using DeepStream-like structure
+            bbox = rect_params_to_dict(
+                left=coords[0],
+                top=coords[1],
+                width=coords[2],
+                height=coords[3],
             )
+
+            obj_meta = format_obj_meta(
+                uri=uri,
+                frame_num=frame_count,
+                track_id=tid,
+                class_id=coords[4],
+                confidence=round(random.uniform(0.8, 0.98), 2),
+                bbox=bbox,
+            )
+
+            frame_detections.append(obj_meta)
 
             # 5% chance an object leaves the frame
             if random.random() < OBJECT_EXIT_PROBABILITY:
@@ -78,30 +133,51 @@ def live_stream_tracker_simulation(fps: int = 30) -> Generator[dict[str, Any]]:
 
         yield {
             "timestamp": time.time(),
-            "frame_id": frame_count,
+            "frame_num": frame_count,
             "detections": frame_detections,
             "active_count": len(active_tracks),
         }
 
 
-def run_simulation(fps: int = 30) -> None:
-    """Run the live stream tracker simulation."""
-    # --- Consumer Loop (The 'Live' System) ---
-    logger.info("📡 Receiving Live Stream Metadata (Ctrl+C to stop)...")
+def run_simulation(
+    fps: int = 30,
+    source_id: int = 0,
+    uri: str = "rtsp://camera/stream",
+    port: int = 5555,
+) -> None:
+    """Run the live stream tracker simulation and send via ZeroMQ."""
+    # Initialize ZeroMQ PUB socket
+    context = zmq.Context()
+    socket = context.socket(zmq.PUB)
+    socket.bind(f"tcp://*:{port}")
+
+    logger.info("📡 Sending Live Stream Metadata via ZeroMQ (Ctrl+C to stop)...")
+    logger.info("📡 Publishing on tcp://*:%s", port)
 
     try:
-        for metadata in live_stream_tracker_simulation(fps=fps):
+        for metadata in live_stream_tracker_simulation(fps=fps, uri=uri):
+            # Send metadata via ZeroMQ
+            send_metadata(
+                socket=socket,
+                source_id=source_id,
+                frame_objects=metadata["detections"],
+            )
+
             logger.debug(
-                "[%s] Active Objects: %s",
-                metadata["frame_id"],
+                "[Frame %s] Active Objects: %s",
+                metadata["frame_num"],
                 metadata["active_count"],
             )
             for det in metadata["detections"]:
                 logger.debug(
-                    "  └─ ID %s: %s | Box: %s",
+                    "  └─ ID %s (class_id=%s) | Confidence: %.2f | BBox: %s",
                     det["track_id"],
-                    det["label"],
-                    det["box_xyxy"],
+                    det["class_id"],
+                    det["confidence"],
+                    det["bbox"],
                 )
     except KeyboardInterrupt:
         logger.info("🛑 Stream stopped by user.")
+    finally:
+        socket.close()
+        context.term()

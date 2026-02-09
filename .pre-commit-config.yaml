@@ -19,7 +19,7 @@ repos:
       - id: cpplint
         args: ['--filter=-legal/copyright,-runtime/explicit,-whitespace/comments,--quiet']
       - id: cppcheck
-        args: [--enable=all, --suppress=missingIncludeSystem, --suppress=noExplicitConstructor]
+        args: [--enable=all, --inline-suppr, --std=c++17, --language=c++, --suppress=unmatchedSuppression, --suppress=missingIncludeSystem, --suppress=noExplicitConstructor, -Isrc/cpp, -Isrc/cpp/common]
 
   - repo: local
     hooks:

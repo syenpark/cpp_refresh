@@ -1,6 +1,7 @@
 /*
 clang++ -std=c++20 -O0 -Wextra -g reference_vs_copy.cpp -o reference_vs_copy
-clang++ -std=c++20 -O1 -g -fsanitize=address reference_vs_copy.cpp -o reference_vs_copy_asan
+clang++ -std=c++20 -O1 -g -fsanitize=address reference_vs_copy.cpp -o
+reference_vs_copy_asan
 ./reference_vs_copy_asan
 
 */
@@ -9,58 +10,52 @@ clang++ -std=c++20 -O1 -g -fsanitize=address reference_vs_copy.cpp -o reference_
 #include <vector>
 
 struct Obj {
-    int id;
+  int id;
 
-    // Constructor
-    Obj(int i) : id(i) {
-        std::cout << "Construct " << id << "\n";
-    }
+  // Constructor
+  Obj(int i) : id(i) { std::cout << "Construct " << id << "\n"; }
 
-    // Copy constructor (used when copying an object)
-    Obj(const Obj& other) : id(other.id) {
-        std::cout << "Copy construct " << id << "\n";
-    }
+  // Copy constructor (used when copying an object)
+  Obj(const Obj &other) : id(other.id) {
+    std::cout << "Copy construct " << id << "\n";
+  }
 
-    /*
-    // ❌ WRONG - Infinite recursion!
-    Obj(Obj other) : id(other.id) {
-        std::cout << "Copy construct " << id << "\n";
-    }
+  /*
+  // ❌ WRONG - Infinite recursion!
+  Obj(Obj other) : id(other.id) {
+      std::cout << "Copy construct " << id << "\n";
+  }
 
-    // When you do: Obj b = a;
-    // 1. Call copy constructor with 'a'
-    // 2. To pass 'a' by value, we need to... COPY it!
-    // 3. Which calls the copy constructor again
-    // 4. Which needs to copy 'a' again
-    // 5. Which calls the copy constructor...
-    // ∞ INFINITE LOOP! Stack overflow!
-    */
+  // When you do: Obj b = a;
+  // 1. Call copy constructor with 'a'
+  // 2. To pass 'a' by value, we need to... COPY it!
+  // 3. Which calls the copy constructor again
+  // 4. Which needs to copy 'a' again
+  // 5. Which calls the copy constructor...
+  // ∞ INFINITE LOOP! Stack overflow!
+  */
 
-    // Destructor
-    ~Obj() {
-        std::cout << "Destruct " << id << "\n";
-    }
+  // Destructor
+  ~Obj() { std::cout << "Destruct " << id << "\n"; }
 };
 
 // Function that takes an object by reference (no copy)
-void f(const Obj& o) { // const to prevent modification
-    // o is just another name for the same object argument passed in
-    // No new object is created, no copy constructor called
-    std::cout << "In f\n";
+void f(const Obj &o) { // const to prevent modification
+  // o is just another name for the same object argument passed in
+  // No new object is created, no copy constructor called
+  std::cout << "In f\n";
 }
 
 // Function that takes an object by value (copy happens)
-void g(Obj o) {
-    std::cout << "In g\n";
-}
+void g(Obj o) { std::cout << "In g\n"; }
 
 int main() {
-    Obj a(1);       // Object 'a' is created on the stack
+  Obj a(1); // Object 'a' is created on the stack
 
-    f(a);           // No copy: 'a' is passed by reference to f
-    g(a);           // Copy happens: 'a' is copied into 'o' in g
+  f(a); // No copy: 'a' is passed by reference to f
+  g(a); // Copy happens: 'a' is copied into 'o' in g
 
-    // At the end of the function, destructors for 'a' and 'o' will be called
+  // At the end of the function, destructors for 'a' and 'o' will be called
 }
 
 /*

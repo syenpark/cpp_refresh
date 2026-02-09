@@ -3,6 +3,8 @@ fps = 25
 source_id = 0
 uri = "rtsp://camera/stream"
 fps_check_interval_sec=10
+max_sources = 1
+max_detections = 300
 
 [simulation]
 # Constants for simulation probabilities
@@ -10,4 +12,8 @@ new_object_probability = 0.1
 object_exit_probability = 0.05
 
 [zmq]
+endpoint = "tcp://127.0.0.1:5555"
+socket_type = "sub"
+subscribe = ""
 port = 5555
+rcvhwm = 1000

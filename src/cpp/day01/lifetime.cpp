@@ -4,92 +4,88 @@ clang++ -std=c++20 -O1 -g -fsanitize=address lifetime.cpp -o lifetime_asan
 ./lifetime_asan
 
 You must be able to answer (out loud)
-	•	Why does Destruct 1 happen exactly where it does?
-	•	Who decides when Destruct 2 runs?
-	•	What wouldn’t call the destructor?
+        •	Why does Destruct 1 happen exactly where it does?
+        •	Who decides when Destruct 2 runs?
+        •	What wouldn’t call the destructor?
 
 */
 
 #include <iostream>
 
 struct Obj {
-    int id;
-    // constructor
-    Obj(int i): id(i) { // initializer list
-        std::cout << "Construct " << id << "\n";
-    }
+  int id;
+  // constructor
+  Obj(int i) : id(i) { // initializer list
+    std::cout << "Construct " << id << "\n";
+  }
 
-    /*
-    initializer list version
-    Step 1: Object allocation begins
-    id is INITIALIZED directly with value i
+  /*
+  initializer list version
+  Step 1: Object allocation begins
+  id is INITIALIZED directly with value i
 
-    STACK:
-    ┌──────────────────────────┐
-    │  Obj being constructed:  │
-    │    id = 5 (initialized)  │  ✅ Set directly to 5
-    └──────────────────────────┘
+  STACK:
+  ┌──────────────────────────┐
+  │  Obj being constructed:  │
+  │    id = 5 (initialized)  │  ✅ Set directly to 5
+  └──────────────────────────┘
 
-    Step 2: Enter constructor body
-    id already has correct value
-    Print message
+  Step 2: Enter constructor body
+  id already has correct value
+  Print message
 
-    --
-    vs initializer contructor body assignment version
+  --
+  vs initializer contructor body assignment version
 
-    Obj(int i) {
-        id = i;
-        std::cout << "Construct " << id << "\n";
-    }
+  Obj(int i) {
+      id = i;
+      std::cout << "Construct " << id << "\n";
+  }
 
-    Step 1: Object allocation begins
-    id is DEFAULT-INITIALIZED (undefined/garbage for int!)
+  Step 1: Object allocation begins
+  id is DEFAULT-INITIALIZED (undefined/garbage for int!)
 
-    STACK:
-    ┌──────────────────────────┐
-    │  Obj being constructed:  │
-    │    id = ??? (garbage)    │  ⚠️ Undefined value!
-    └──────────────────────────┘
+  STACK:
+  ┌──────────────────────────┐
+  │  Obj being constructed:  │
+  │    id = ??? (garbage)    │  ⚠️ Undefined value!
+  └──────────────────────────┘
 
-    Step 2: Enter constructor body
-    id = i;  (assignment)
+  Step 2: Enter constructor body
+  id = i;  (assignment)
 
-    STACK:
-    ┌──────────────────────────┐
-    │  Obj being constructed:  │
-    │    id = 5 (assigned)     │  ✅ Now set to 5
-    └──────────────────────────┘
+  STACK:
+  ┌──────────────────────────┐
+  │  Obj being constructed:  │
+  │    id = 5 (assigned)     │  ✅ Now set to 5
+  └──────────────────────────┘
 
-    Print message
-    */
+  Print message
+  */
 
-    // destructor
-    ~Obj() {
-        std::cout << "Destruct " << id << "\n";
-    }
+  // destructor
+  ~Obj() { std::cout << "Destruct " << id << "\n"; }
 };
 
-void stack_scope() {
-    Obj a(1);
-}
+void stack_scope() { Obj a(1); }
 
 void heap_scope() {
-    Obj* b = new Obj(2); // new always returns a pointer
-    delete b;
-    // delete doesn't clear the pointer
-    // leaving a dangling pointer is dangerous
-    b = nullptr;
-    // std::cout << "Accessing freed object: " << b->id << "\n";
+  Obj *b = new Obj(2); // new always returns a pointer
+  delete b;
+  // delete doesn't clear the pointer
+  // leaving a dangling pointer is dangerous
+  b = nullptr;
+  // std::cout << "Accessing freed object: " << b->id << "\n";
 }
 
 int main() {
-    std::cout << "Entering stack_scope\n";
-    stack_scope();
-    std::cout << "Exited stack_scope\n\n";
+  std::cout << "Entering stack_scope\n";
+  stack_scope();
+  std::cout << "Exited stack_scope\n\n";
 
-    std::cout << "Entering heap_scope\n";
-    heap_scope();
-    std::cout << "Exited heap_scope\n";
+  std::cout << "Entering heap_scope\n";
+  heap_scope();
+  std::cout << "Exited heap_scope\n";
 }
 
 /*

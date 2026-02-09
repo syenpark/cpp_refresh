@@ -34,6 +34,8 @@ class PerformanceMetrics:
         # FPS tracking
         self.frame_times: deque[float] = deque(maxlen=window_size)
         self.total_frames = 0
+        self.start_time = time.time()
+        self.last_frame_time = time.time()
 
         # Latency tracking
         self.latencies: deque[float] = deque(maxlen=window_size)
@@ -46,9 +48,9 @@ class PerformanceMetrics:
         # Process handle for CPU/Memory
         self.process = psutil.Process()
 
-        # Timing
-        self.start_time = time.time()
-        self.last_frame_time = time.time()
+    # ========================================================================
+    # Frame Lifecycle
+    # ========================================================================
 
     def start_frame(self) -> None:
         """Mark the start of frame processing."""
@@ -73,13 +75,9 @@ class PerformanceMetrics:
         self.total_frames += 1
         self.frame_start_time = None
 
-    def record_cache_hit(self) -> None:
-        """Record a cache hit."""
-        self.cache_hits += 1
-
-    def record_cache_miss(self) -> None:
-        """Record a cache miss."""
-        self.cache_misses += 1
+    # ========================================================================
+    # FPS Metrics
+    # ========================================================================
 
     def get_fps(self) -> float:
         """Get current FPS based on recent frame times.
@@ -101,6 +99,10 @@ class PerformanceMetrics:
         """
         elapsed = time.time() - self.start_time
         return self.total_frames / elapsed if elapsed > 0 else 0.0
+
+    # ========================================================================
+    # Latency Metrics
+    # ========================================================================
 
     def get_latency_stats(self) -> dict[str, float]:
         """Get latency statistics.
@@ -130,6 +132,10 @@ class PerformanceMetrics:
             "p99_ms": sorted_latencies[p99_idx] * 1000 if p99_idx < n else 0.0,
         }
 
+    # ========================================================================
+    # Memory Metrics
+    # ========================================================================
+
     def get_memory_usage(self) -> dict[str, float]:
         """Get current memory usage.
 
@@ -142,6 +148,10 @@ class PerformanceMetrics:
             "vms_mb": mem_info.vms / (1024 * 1024),  # Virtual Memory Size
         }
 
+    # ========================================================================
+    # CPU Metrics
+    # ========================================================================
+
     def get_cpu_usage(self) -> float:
         """Get CPU usage percentage.
 
@@ -149,6 +159,18 @@ class PerformanceMetrics:
             CPU usage as percentage (0-100)
         """
         return self.process.cpu_percent(interval=0.1)
+
+    # ========================================================================
+    # Cache Metrics
+    # ========================================================================
+
+    def record_cache_hit(self) -> None:
+        """Record a cache hit."""
+        self.cache_hits += 1
+
+    def record_cache_miss(self) -> None:
+        """Record a cache miss."""
+        self.cache_misses += 1
 
     def get_cache_stats(self) -> dict[str, float]:
         """Get cache hit/miss statistics.
@@ -165,6 +187,10 @@ class PerformanceMetrics:
             "total": total,
             "hit_rate": hit_rate,
         }
+
+    # ========================================================================
+    # Aggregate Metrics
+    # ========================================================================
 
     def get_all_metrics(self) -> dict[str, Any]:
         """Get all metrics as a dictionary.
@@ -239,6 +265,10 @@ class PerformanceMetrics:
             metrics["uptime_seconds"],
         )
         logger.info("=" * 70)
+
+    # ========================================================================
+    # Utility
+    # ========================================================================
 
     def reset(self) -> None:
         """Reset all metrics."""

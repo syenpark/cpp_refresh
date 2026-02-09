@@ -3,6 +3,7 @@
 This repository is a **C++ bootstrap for a low-latency analytics container**.
 
 Current scope (as of now):
+
 - ✅ C++ project skeleton with CMake
 - ✅ `config.toml` parsing via **toml++**
 - ✅ argv-based config path handling
@@ -19,8 +20,7 @@ The goal is to build this incrementally toward a **low-latency analytics engine*
 ```text
 cpp_refresh/
 ├── CMakeLists.txt
-├── config/
-│   └── config.toml
+├── config.toml
 ├── external/
 │   └── tomlplusplus/          # git submodule
 ├── src/
@@ -39,11 +39,13 @@ cpp_refresh/
 ## Dependencies
 
 ### Required
+
 - **CMake ≥ 3.16**
 - **C++17 compiler** (clang or gcc)
 - **git** (for submodules)
 
 ### Optional (recommended)
+
 - clang-format
 - cpplint
 - cppcheck
@@ -96,7 +98,7 @@ cmake --build build -j
 From repo root:
 
 ```bash
-./build/analytics config/config.toml
+./build/analytics config.toml
 ```
 
 ---

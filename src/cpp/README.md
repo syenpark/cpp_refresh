@@ -133,7 +133,7 @@ From the repository root:
 
 ```bash
 mkdir -p build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_METRICS=ON
 cmake --build build -j
 ```
 

@@ -7,6 +7,26 @@
 #include "include/rapidjson.hpp"
 #include <zmq.hpp>
 
+// ================= Metrics (Step 2) =================
+
+struct NullMetrics {
+  // cppcheck-suppress functionStatic
+  inline void on_frame() {}
+};
+
+struct RealMetrics {
+  uint64_t frames = 0;
+  inline void on_frame() { frames++; }
+};
+
+#ifdef ENABLE_METRICS
+using Metrics = RealMetrics;
+#else
+using Metrics = NullMetrics;
+#endif
+
+// ====================================================
+
 void parse_metadata(const zmq::message_t &payload) {
   rapidjson::Document doc;
 
@@ -16,16 +36,12 @@ void parse_metadata(const zmq::message_t &payload) {
     return;
   }
 
-  std::cout << "Parsed payload.size()=" << payload.size() << "\n";
-
   // Iterate through the JSON object and print track_id of each detection
   for (auto it = doc.MemberBegin(); it != doc.MemberEnd(); ++it) {
     const auto &detections = it->value;
 
-    if (!detections.IsArray()) {
-      std::cerr << "Detections is not an array\n";
+    if (!detections.IsArray())
       continue;
-    }
 
     for (auto &det : detections.GetArray()) {
       int track_id = det["track_id"].GetInt();
@@ -68,20 +84,38 @@ int main(int argc, char **argv) {
   zmq::message_t topic;
   zmq::message_t payload;
 
+  Metrics metrics;
+#ifdef ENABLE_METRICS
+  auto start = std::chrono::steady_clock::now();
+  auto last_report = start;
+#endif
+
   while (true) {
     // I/O blocking recv
-    if (!socket.recv(topic, zmq::recv_flags::none)) {
-      std::cerr << "Failed to receive topic\n";
+    if (!socket.recv(topic, zmq::recv_flags::none))
       break;
-    }
+    if (!socket.recv(payload, zmq::recv_flags::none))
+      break;
 
-    if (socket.recv(payload, zmq::recv_flags::none)) {
-      std::cout << "Received size=" << payload.size() << "\n";
-      parse_metadata(payload);
-    } else {
-      std::cout << "Failed to receive message\n";
-      break;
+    // ---------- hot path ----------
+    parse_metadata(payload);
+    metrics.on_frame();
+    // ------- end hot path ---------
+
+#ifdef ENABLE_METRICS
+    // ---------- cold path ----------
+    auto now = std::chrono::steady_clock::now();
+    if (now - last_report >= std::chrono::seconds(5)) {
+      auto elapsed =
+          std::chrono::duration_cast<std::chrono::milliseconds>(now - start)
+              .count();
+      double fps = metrics.frames * 1000.0 / elapsed;
+
+      std::cerr << "[FPS] " << fps << "\n";
+      last_report = now;
     }
+    // ------- end cold path ---------
+#endif
   }
   return 0;
 }

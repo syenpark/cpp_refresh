@@ -28,3 +28,9 @@ target_link_directories(analytics PRIVATE
 target_link_libraries(analytics PRIVATE
     ${ZMQ_LIBRARIES}
 )
+
+option(ENABLE_METRICS "Enable metrics collection" OFF)
+
+if (ENABLE_METRICS)
+  add_compile_definitions(ENABLE_METRICS)
+endif()

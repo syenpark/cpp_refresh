@@ -7,17 +7,17 @@
 #include "include/rapidjson.hpp"
 #include <zmq.hpp>
 
-void test_parse(const zmq::message_t &msg) {
+void test_parse(const zmq::message_t &payload) {
   rapidjson::Document doc;
 
-  doc.Parse(static_cast<const char *>(msg.data()), msg.size());
-
-  std::cout << "Parsed msg.size()=" << msg.size() << "\n";
+  doc.Parse(static_cast<const char *>(payload.data()), payload.size());
 
   if (!doc.IsObject()) {
     std::cerr << "Invalid JSON\n";
     return;
   }
+
+  std::cout << "Parsed payload.size()=" << payload.size() << "\n";
 
   for (auto it = doc.MemberBegin(); it != doc.MemberEnd(); ++it) {
     const auto &detections = it->value;
@@ -56,15 +56,19 @@ int main(int argc, char **argv) {
   std::cout << "Connected to " << cfg.zmq.endpoint << "\n";
 
   // ---------- recv test ----------
-  zmq::message_t msg;
+  zmq::message_t topic;
+  zmq::message_t payload;
 
   while (true) {
     // I/O blocking recv
-    auto result = socket.recv(msg, zmq::recv_flags::none);
+    if (!socket.recv(topic, zmq::recv_flags::none)) {
+      std::cerr << "Failed to receive topic\n";
+      break;
+    }
 
-    if (result) {
-      std::cout << "Received size=" << msg.size() << "\n";
-      test_parse(msg);
+    if (socket.recv(payload, zmq::recv_flags::none)) {
+      std::cout << "Received size=" << payload.size() << "\n";
+      test_parse(payload);
     } else {
       std::cout << "Failed to receive message\n";
       break;

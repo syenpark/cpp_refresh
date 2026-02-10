@@ -160,3 +160,80 @@ The Python implementation will serve as a reference for the [analytics](./src/py
 ```
 
 More details, please check [./src/python/yolo/inference/README.md](./src/python/yolo/inference/README.md) for inference container, [./src/python/yolo/analytics/README.md](./src/python/yolo/analytics/README.md) for analytics container written in Python.
+
+### Hot loop
+
+Why the C++ Rewrite?
+The Python implementation suffers from significant overhead in the "hot loop" due to:
+
+1. Pointer Chasing: Python's memory model requires multiple heap lookups (List → Object → Dict → Value), leading to frequent cache misses.
+2. Dynamic Lookups: Every attribute access (obj.bbox) triggers a hash table lookup in the instance dictionary.
+3. Memory Fragmentation: Python objects are scattered across the heap, preventing the CPU hardware prefetcher from optimizing data throughput.
+
+The C++ Advantage:
+By using a contiguous std::vector of POD (Plain Old Data) structs, we achieve linear memory access. This allows the CPU to leverage its L1/L2 caches effectively, eliminates dictionary lookups through fixed memory offsets, and removes the interpreter overhead, resulting in a 10x-100x speedup for metadata-heavy analytics.
+
+```bash
+PYTHON (hot loop)              C++ (hot loop)
+──────────────────────────     ──────────────────────────
+list -> pointer                vector -> data
+      -> object
+         -> dict
+            -> value           direct offset load
+hash + lookup                  no lookup
+pointer chase                  linear memory access
+interpreter dispatch           compiled loop
+heap objects everywhere        one contiguous buffer
+```
+
+```bash
+# Python
+       CPU (The "Hot Loop" Runner)
+        │
+        │  for obj in objects:  <-- Interpreter bytecode execution
+        │
+        ▼
+┌────────────────────────────┐
+│ Python List (Array)        │   ← Contiguous array of 8-byte pointers
+│ [ ptr_A ][ ptr_B ][ ptr_C ]│
+└────║─────────│─────────│───┘
+     ║         │         │
+     ▼         ▼         ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│  PyObject A  │   │  PyObject B  │   │  PyObject C  │  ← Scattered on the HEAP
+├──────────────┤   └──────────────┘   └──────────────┘    (Causes Cache Misses!)
+│ Ref Count    │                                        ← Metadata overhead
+│ Type Pointer │                                        ← "I am a 'Track' object"
+│ __dict__ ptr │──┐
+└──────────────┘  │
+                  ▼
+          ┌──────────────┐
+          │ Instance Dict│  ← HASH TABLE LOOKUP for "bbox"
+          ├──────────────┤    (Expensive CPU work!)
+          │ "bbox" : ptr │──┐
+          └──────────────┘  │
+                            ▼
+                    ┌──────────────┐
+                    │ PyFloat Obj  │  ← The actual data (cx)
+                    ├──────────────┤    (Another heap hop!)
+                    │ Value: 12.5  │
+                    └──────────────┘
+```
+
+```bash
+# C++
+       CPU
+        │
+        │  for (const auto& obj : objects):
+        │
+        ▼
+┌───────────────────────────────────────────┐
+│ std::vector<TrackData> (Contiguous)       │
+│ ┌─────────┐┌─────────┐┌─────────┐         │
+│ │ Track A ││ Track B ││ Track C │         │
+│ │ [bbox]  ││ [bbox]  ││ [bbox]  │         │  ← NO pointers. NO dicts.
+│ │ [cx/cy] ││ [cx/cy] ││ [cx/cy] │         │    NO scattered heap.
+│ └─────────┘└─────────┘└─────────┘         │
+└───────────────────────────────────────────┘
+
+```

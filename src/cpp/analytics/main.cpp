@@ -1,11 +1,10 @@
-#include <rapidjson/document.h>
-
 #include <chrono>
 #include <iostream>
 #include <string>
 #include <utility>
 
 #include "common/config.h"
+#include "include/rapidjson.hpp"
 #include <zmq.hpp>
 
 void test_parse(const zmq::message_t &msg) {

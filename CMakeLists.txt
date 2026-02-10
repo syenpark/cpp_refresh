@@ -16,6 +16,7 @@ target_include_directories(analytics PRIVATE
     src/cpp
     external/tomlplusplus/include
     external/cppzmq
+    external/rapidjson/include
     ${ZMQ_INCLUDE_DIRS}
 )
 

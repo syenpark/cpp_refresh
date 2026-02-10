@@ -22,7 +22,9 @@ As of now, this repository provides:
 - ✅ argv-based config path handling
 - ✅ clang-format / cpplint / cppcheck wired via **pre-commit**
 - ✅ **ZeroMQ** installed and linked (libzmq + cppzmq)
-- ❌ No analytics hot loop yet
+- ✅ JSON parsing via **RapidJSON** (consumer-side decode)
+- ✅ Optional compile-time metrics (`ENABLE_METRICS`)
+- ❌ No analytics hot loop yet (beyond decode + iteration)
 - ❌ No threading / polling / performance tuning yet
 
 The goal is to build this incrementally toward a **low-latency analytics engine**, without hiding system complexity.
@@ -38,7 +40,7 @@ cpp_refresh/
 ├── external/
 │   ├── tomlplusplus/           # git submodule (header-only)
 │   ├── cppzmq/                 # git submodule (header-only)
-|   └── rapidjson/              # git submodule (header-only)
+│   └── rapidjson/              # git submodule (header-only)
 ├── src/
 │   └── cpp/
 │       ├── common/
@@ -85,10 +87,11 @@ git submodule update --init --recursive
 
 ZeroMQ consists of:
 
-- libzmq (C core, system library)
-- cppzmq (C++ header-only wrapper)
+- **libzmq** (C core, system library)
+- **cppzmq** (C++ header-only wrapper)
 
 ```bash
+# macOS (Homebrew)
 brew install zeromq
 brew install pkg-config
 
@@ -104,8 +107,8 @@ git submodule update --init --recursive
 ```
 
 > [!note]
-libzmq is treated as a system dependency and linked via pkg-config.
-cppzmq is vendored as a header-only submodule.
+> `libzmq` is treated as a system dependency and linked via `pkg-config`.
+> `cppzmq` and `rapidjson` are vendored as header-only submodules.
 
 ---
 
@@ -121,7 +124,7 @@ max_detections = 32
 [zmq]
 endpoint = "tcp://127.0.0.1:5555"
 socket_type = "sub"
-subscribe = ""
+subscribe = "inference"
 rcvhwm = 1000
 ```
 
@@ -134,6 +137,13 @@ From the repository root:
 ```bash
 mkdir -p build
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_METRICS=ON
+cmake --build build -j
+```
+
+### Disable metrics (compile out instrumentation)
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_METRICS=OFF
 cmake --build build -j
 ```
 
@@ -153,8 +163,35 @@ From the repository root:
 
 - Parses `config.toml`
 - Loads into typed `Config` struct
-- Prints selected values
-- Exits
+- Connects a ZeroMQ SUB socket
+- Receives multipart messages: `(topic, payload)`
+- Parses JSON payload (RapidJSON) and iterates per-source and per-detection
+- Optional: prints lightweight FPS when built with metrics enabled
+
+**Important:** This repo currently focuses on *I/O + decode* plumbing. Analytics logic comes later.
+
+---
+
+## Measurement Notes (Python vs C++)
+
+This repo has been used to compare **Python vs C++ analytics consumers** under the *same input stream*.
+
+Key observation so far:
+
+- **RSS (resident memory)**
+  - Python consumer: ~30 MB (example: ~30544 KB)
+  - C++ consumer: ~2–3 MB (example: ~2432 KB)
+
+- **CPU (input-limited ~60 FPS)**
+  - Both appear low in absolute % because the pipeline is input-bounded.
+  - Python still shows higher per-frame CPU cost and less headroom.
+
+Because the pipeline can be input-bounded, **FPS alone is not the primary metric**.
+What matters more for scaling is:
+
+- CPU cost per frame
+- memory footprint stability
+- headroom under increased producer pressure
 
 ---
 
@@ -178,16 +215,15 @@ pre-commit run --all-files
 ## Design Notes
 
 - Config parsed once at startup
-- No hot-path string lookups
-- Struct-based config enforces clear ownership and lifetime
-- System dependencies (libzmq) are kept explicit and visible
-
-This repository intentionally avoids hiding complexity behind frameworks.
+- No hot-path string lookups for config access (struct-based config)
+- Metrics instrumentation is compile-time removable (`ENABLE_METRICS`)
+- System dependencies (libzmq) stay explicit (not hidden behind a framework)
 
 ---
 
 ## Next Steps
 
-1. Decode to POD structs
-2. Analytics hot loop
-3. Metrics / latency instrumentation
+1. Decode JSON directly into POD structs (avoid dynamic field access in hot paths)
+2. Add minimal analytics hot loop (single camera / single ROI)
+3. Add controlled load generator (publisher) to push throughput
+4. Then: multi-source, ROI fan-out, threading experiments

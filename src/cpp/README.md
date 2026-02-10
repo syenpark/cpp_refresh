@@ -1,17 +1,31 @@
-# C++ Analytics Bootstrap (Config + Tooling)
+# C++ Analytics Bootstrap (Config + Tooling, ZeroMQ)
 
 This repository is a **C++ bootstrap for a low-latency analytics container**.
 
-Current scope (as of now):
+The project intentionally starts small and explicit, focusing on:
 
-- ✅ C++ project skeleton with CMake
+- build system correctness
+- dependency wiring
+- configuration loading
+- process-level I/O (ZeroMQ)
+
+before introducing any analytics hot paths.
+
+---
+
+## Current Scope
+
+As of now, this repository provides:
+
+- ✅ C++ project skeleton with **CMake**
 - ✅ `config.toml` parsing via **toml++**
 - ✅ argv-based config path handling
-- ✅ clang-format / cpplint / cppcheck wired via pre-commit
-- ❌ No ZeroMQ yet
+- ✅ clang-format / cpplint / cppcheck wired via **pre-commit**
+- ✅ **ZeroMQ** installed and linked (libzmq + cppzmq)
 - ❌ No analytics hot loop yet
+- ❌ No threading / polling / performance tuning yet
 
-The goal is to build this incrementally toward a **low-latency analytics engine**.
+The goal is to build this incrementally toward a **low-latency analytics engine**, without hiding system complexity.
 
 ---
 
@@ -22,7 +36,8 @@ cpp_refresh/
 ├── CMakeLists.txt
 ├── config.toml
 ├── external/
-│   └── tomlplusplus/          # git submodule
+│   ├── tomlplusplus/          # git submodule (header-only)
+│   └── cppzmq/                # git submodule (header-only)
 ├── src/
 │   └── cpp/
 │       ├── common/
@@ -43,6 +58,7 @@ cpp_refresh/
 - **CMake ≥ 3.16**
 - **C++17 compiler** (clang or gcc)
 - **git** (for submodules)
+- **ZeroMQ** (libzmq)
 
 ### Optional (recommended)
 
@@ -53,13 +69,35 @@ cpp_refresh/
 
 ---
 
-## Installing toml++
+## Installing Dependencies
 
-This project uses **toml++** (header-only).
+### toml++
+
+This project uses toml++ (header-only).
 
 ```bash
+git submodule add https://github.com/marzer/tomlplusplus external/tomlplusplus
 git submodule update --init --recursive
 ```
+
+### ZeroMQ
+
+ZeroMQ consists of:
+
+- libzmq (C core, system library)
+- cppzmq (C++ header-only wrapper)
+
+```bash
+brew install zeromq
+brew install pkg-config
+
+git submodule add https://github.com/zeromq/cppzmq external/cppzmq
+git submodule update --init --recursive
+```
+
+> [!note]
+libzmq is treated as a system dependency and linked via pkg-config.
+cppzmq is vendored as a header-only submodule.
 
 ---
 
@@ -79,11 +117,11 @@ subscribe = ""
 rcvhwm = 1000
 ```
 
-ZMQ fields are parsed but **not used yet**.
-
 ---
 
 ## Build
+
+From the repository root:
 
 ```bash
 mkdir -p build
@@ -95,7 +133,7 @@ cmake --build build -j
 
 ## Run
 
-From repo root:
+From the repository root:
 
 ```bash
 ./build/analytics config.toml
@@ -133,7 +171,10 @@ pre-commit run --all-files
 
 - Config parsed once at startup
 - No hot-path string lookups
-- Structured for low-latency evolution
+- Struct-based config enforces clear ownership and lifetime
+- System dependencies (libzmq) are kept explicit and visible
+
+This repository intentionally avoids hiding complexity behind frameworks.
 
 ---
 

@@ -35,13 +35,17 @@ int main(int argc, char **argv) {
 
   // ---------- recv test ----------
   zmq::message_t msg;
-  auto result = socket.recv(msg, zmq::recv_flags::none);
 
-  if (result) {
-    std::cout << "Received message size=" << msg.size() << "\n";
-  } else {
-    std::cout << "Failed to receive message\n";
+  while (true) {
+    // I/O blocking recv
+    auto result = socket.recv(msg, zmq::recv_flags::none);
+
+    if (result) {
+      std::cout << "Received size=" << msg.size() << "\n";
+    } else {
+      std::cout << "Failed to receive message\n";
+      break;
+    }
   }
-
   return 0;
 }

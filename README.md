@@ -2,6 +2,9 @@
 
 I'm currently brushing up on my C++ skills to prepare for a career as a real-time engineer in the age of AI. Check out [jargon.md](./docs/jargon.md) for the fundamental terms you'll need to know.
 
+> [!IMPORTANT]
+The [./src/cpp](./src/cpp/) directory contains the C++ analytic container, which serves as the core of this repository, rewriting the original Python implementation for improved performance. For more details, see the [./src/cpp/README.md](./src/cpp/README.md).
+
 ## Contents
 
 - [Battlefield](#battlefield-)
@@ -157,6 +160,3 @@ The Python implementation will serve as a reference for the [analytics](./src/py
 ```
 
 More details, please check [./src/python/yolo/inference/README.md](./src/python/yolo/inference/README.md) for inference container, [./src/python/yolo/analytics/README.md](./src/python/yolo/analytics/README.md) for analytics container written in Python.
-
-> [!IMPORTANT]
-[./src/cpp](./src/cpp/) for the analytic container in C++, which is the main part in this repository.

@@ -1,10 +1,33 @@
+#include <rapidjson/document.h>
+
+#include <chrono>
 #include <iostream>
 #include <string>
 #include <utility>
 
+#include "common/config.h"
 #include <zmq.hpp>
 
-#include "common/config.h"
+void test_parse(const zmq::message_t &msg) {
+  rapidjson::Document doc;
+
+  doc.Parse(static_cast<const char *>(msg.data()), msg.size());
+
+  std::cout << "Parsed msg.size()=" << msg.size() << "\n";
+
+  if (!doc.IsObject()) {
+    std::cerr << "Invalid JSON\n";
+    return;
+  }
+
+  for (auto it = doc.MemberBegin(); it != doc.MemberEnd(); ++it) {
+    const auto &detections = it->value;
+    for (auto &d : detections.GetArray()) {
+      int track_id = d["track_id"].GetInt();
+      (void)track_id;
+    }
+  }
+}
 
 int main(int argc, char **argv) {
   // ---------- config ----------
@@ -42,6 +65,7 @@ int main(int argc, char **argv) {
 
     if (result) {
       std::cout << "Received size=" << msg.size() << "\n";
+      test_parse(msg);
     } else {
       std::cout << "Failed to receive message\n";
       break;

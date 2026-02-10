@@ -36,8 +36,9 @@ cpp_refresh/
 ├── CMakeLists.txt
 ├── config.toml
 ├── external/
-│   ├── tomlplusplus/          # git submodule (header-only)
-│   └── cppzmq/                # git submodule (header-only)
+│   ├── tomlplusplus/           # git submodule (header-only)
+│   ├── cppzmq/                 # git submodule (header-only)
+|   └── rapidjson/              # git submodule (header-only)
 ├── src/
 │   └── cpp/
 │       ├── common/
@@ -92,6 +93,13 @@ brew install zeromq
 brew install pkg-config
 
 git submodule add https://github.com/zeromq/cppzmq external/cppzmq
+git submodule update --init --recursive
+```
+
+### RapidJSON
+
+```bash
+git submodule add https://github.com/Tencent/rapidjson external/rapidjson
 git submodule update --init --recursive
 ```
 
@@ -180,8 +188,6 @@ This repository intentionally avoids hiding complexity behind frameworks.
 
 ## Next Steps
 
-1. ZeroMQ init
-2. Message recv loop
-3. Decode to POD structs
-4. Analytics hot loop
-5. Metrics / latency instrumentation
+1. Decode to POD structs
+2. Analytics hot loop
+3. Metrics / latency instrumentation

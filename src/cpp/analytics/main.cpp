@@ -13,7 +13,13 @@ int main(int argc, char **argv) {
   if (argc > 1) {
     config_path = argv[1];
   }
+
   Config cfg = load_config(config_path);
+
+  std::cout << "[config]\n";
+  std::cout << "  max_sources: " << cfg.analytics.max_sources << "\n";
+  std::cout << "  max_detections: " << cfg.analytics.max_detections << "\n";
+  std::cout << "  zmq endpoint: " << cfg.zmq.endpoint << "\n";
 
   // ---------- zmq init ----------
   zmq::context_t ctx{1};
@@ -29,14 +35,13 @@ int main(int argc, char **argv) {
 
   // ---------- recv test ----------
   zmq::message_t msg;
-  socket.recv(msg, zmq::recv_flags::none);
+  auto result = socket.recv(msg, zmq::recv_flags::none);
 
-  std::cout << "Received message size=" << msg.size() << "\n";
-
-  std::cout << "[config]\n";
-  std::cout << "  max_sources: " << cfg.analytics.max_sources << "\n";
-  std::cout << "  max_detections: " << cfg.analytics.max_detections << "\n";
-  std::cout << "  zmq endpoint: " << cfg.zmq.endpoint << "\n";
+  if (result) {
+    std::cout << "Received message size=" << msg.size() << "\n";
+  } else {
+    std::cout << "Failed to receive message\n";
+  }
 
   return 0;
 }

@@ -12,18 +12,28 @@ void test_parse(const zmq::message_t &payload) {
 
   doc.Parse(static_cast<const char *>(payload.data()), payload.size());
 
-  if (!doc.IsObject()) {
+  if (doc.HasParseError() || !doc.IsObject()) {
     std::cerr << "Invalid JSON\n";
     return;
   }
 
   std::cout << "Parsed payload.size()=" << payload.size() << "\n";
 
+  // Iterate through the JSON object and print track_id of each detection
   for (auto it = doc.MemberBegin(); it != doc.MemberEnd(); ++it) {
     const auto &detections = it->value;
-    for (auto &d : detections.GetArray()) {
-      int track_id = d["track_id"].GetInt();
+
+    if (!detections.IsArray()) {
+      std::cerr << "Detections is not an array\n";
+      continue;
+    }
+
+    for (auto &det : detections.GetArray()) {
+      int track_id = det["track_id"].GetInt();
+      int class_id = det["class_id"].GetInt();
+
       (void)track_id;
+      (void)class_id;
     }
   }
 }

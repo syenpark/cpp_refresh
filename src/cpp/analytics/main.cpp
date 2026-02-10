@@ -7,13 +7,12 @@
 #include "include/rapidjson.hpp"
 #include <zmq.hpp>
 
-void test_parse(const zmq::message_t &payload) {
+void parse_metadata(const zmq::message_t &payload) {
   rapidjson::Document doc;
 
   doc.Parse(static_cast<const char *>(payload.data()), payload.size());
 
   if (doc.HasParseError() || !doc.IsObject()) {
-    std::cerr << "Invalid JSON\n";
     return;
   }
 
@@ -78,7 +77,7 @@ int main(int argc, char **argv) {
 
     if (socket.recv(payload, zmq::recv_flags::none)) {
       std::cout << "Received size=" << payload.size() << "\n";
-      test_parse(payload);
+      parse_metadata(payload);
     } else {
       std::cout << "Failed to receive message\n";
       break;

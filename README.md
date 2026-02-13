@@ -68,6 +68,7 @@ Instruction →
 - [day02](./src/cpp/day02/): reference vs copy
 - [day03](./src/cpp/day03/): elide vs move vs copy
 - [day04](./src/cpp/day04/): STL Containers & API Design
+- [day07](./src/cpp/day07/): automic vs mutex
 
 ## Allocators & Cache Behavior (Day 05) [↑](#contents)
 

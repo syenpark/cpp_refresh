@@ -128,8 +128,9 @@ def live_stream_tracker_simulation(
             del active_tracks[tid]
 
         # 3. Simulate real-world FPS timing
-        elapsed = time.perf_counter() - start_time
-        time.sleep(max(0, (1 / fps) - elapsed))
+        if fps is not None and fps > 0:
+            elapsed = time.perf_counter() - start_time
+            time.sleep(max(0, (1 / fps) - elapsed))
 
         yield {
             "timestamp": time.time(),

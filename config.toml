@@ -1,5 +1,5 @@
 [stream]
-fps = 25
+fps = 0 # 0 means unlimited
 source_id = 0
 uri = "rtsp://camera/stream"
 fps_check_interval_sec=10

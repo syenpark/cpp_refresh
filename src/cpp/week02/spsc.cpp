@@ -1,6 +1,7 @@
 // g++ -O3 -std=c++17 -pthread spsc.cpp && ./a.out
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <thread>
@@ -10,8 +11,8 @@ struct SPSC {
 
   int buffer[N];
 
-  std::atomic<size_t> head{0};
-  std::atomic<size_t> tail{0};
+  alignas(64) std::atomic<size_t> head{0};
+  alignas(64) std::atomic<size_t> tail{0};
 
   bool push(int v) {
     // 1) load head
@@ -48,34 +49,21 @@ struct SPSC {
 int main() {
   SPSC q;
 
-  constexpr int ITERS = 50'000'000;
+  constexpr int ITERS = 100'000'000;
 
-  std::atomic<bool> done{false};
-  std::atomic<int> errors{0};
+  auto start = std::chrono::high_resolution_clock::now();
 
   std::thread producer([&]() {
     for (int i = 1; i <= ITERS; ++i) {
       while (!q.push(i)) {
-        // increase interleavings
-        std::this_thread::yield();
       }
     }
-    done.store(true, std::memory_order_release);
   });
 
   std::thread consumer([&]() {
-    int expected = 1;
     int v;
-    while (!done.load(std::memory_order_acquire) || expected <= ITERS) {
-      if (q.pop(v)) {
-        if (v != expected) {
-          errors.fetch_add(1, std::memory_order_relaxed);
-          expected = v + 1; // resync to keep going
-        } else {
-          ++expected;
-        }
-      } else {
-        std::this_thread::yield();
+    for (int i = 1; i <= ITERS; ++i) {
+      while (!q.pop(v)) {
       }
     }
   });
@@ -83,6 +71,9 @@ int main() {
   producer.join();
   consumer.join();
 
-  std::cout << "Errors: " << errors.load() << "\n";
-  return 0;
+  auto end = std::chrono::high_resolution_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+                .count();
+
+  std::cout << "Time (ms): " << ms << "\n";
 }

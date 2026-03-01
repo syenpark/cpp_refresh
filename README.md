@@ -69,6 +69,8 @@ Instruction →
 - [day03](./src/cpp/day03/): elide vs move vs copy
 - [day04](./src/cpp/day04/): STL Containers & API Design
 - [day07](./src/cpp/day07/): automic vs mutex
+- [week02](./src/cpp/week02/): memory ordering
+- [week03](./src/cpp/week03/): lock-free queue
 
 ## Allocators & Cache Behavior (Day 05) [↑](#contents)
 

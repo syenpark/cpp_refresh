@@ -18,14 +18,14 @@
 
 struct Node {
   int value;
-  Node* next;
+  Node *next;
 };
 
 // Pack (Node*, tag) into a trivially-copyable struct.
 // Many platforms will implement this as a 16-byte atomic CAS (or a lock-based
 // fallback).
 struct TaggedHead {
-  Node* ptr;
+  Node *ptr;
   uint64_t tag;
 };
 
@@ -33,13 +33,13 @@ static_assert(std::is_trivially_copyable<TaggedHead>::value,
               "TaggedHead must be trivially copyable");
 
 class TreiberTagged {
- public:
+public:
   TreiberTagged() {
     TaggedHead init{nullptr, 0};
     head_.store(init, std::memory_order_relaxed);
   }
 
-  void push(Node* n) {
+  void push(Node *n) {
     // n must be a valid node; caller controls lifetime (no delete inside).
     TaggedHead old = head_.load(std::memory_order_relaxed);
     for (;;) {
@@ -47,7 +47,7 @@ class TreiberTagged {
 
       TaggedHead desired;
       desired.ptr = n;
-      desired.tag = old.tag + 1;  // bump tag on each head change
+      desired.tag = old.tag + 1; // bump tag on each head change
 
       if (head_.compare_exchange_weak(old, desired, std::memory_order_release,
                                       std::memory_order_relaxed)) {
@@ -57,10 +57,10 @@ class TreiberTagged {
     }
   }
 
-  Node* pop() {
+  Node *pop() {
     TaggedHead old = head_.load(std::memory_order_acquire);
     while (old.ptr) {
-      Node* next = old.ptr->next;
+      Node *next = old.ptr->next;
 
       TaggedHead desired;
       desired.ptr = next;
@@ -80,7 +80,7 @@ class TreiberTagged {
     return head_.load(std::memory_order_acquire);
   }
 
- private:
+private:
   std::atomic<TaggedHead> head_;
 };
 
@@ -110,8 +110,9 @@ int main() {
   std::thread cons([&] {
     int local = 0;
     while (local < N) {
-      Node* n = st.pop();
-      if (!n) continue;
+      Node *n = st.pop();
+      if (!n)
+        continue;
       ++local;
     }
     popped.store(local, std::memory_order_release);

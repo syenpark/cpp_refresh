@@ -12,9 +12,10 @@ struct Node {
 class TreiberStack {
  public:
   void push(Node* n) {
+    // n must already be allocated by caller
     Node* old = head.load(std::memory_order_relaxed);
     do {
-      n->next = old;
+      n->next = old; // publish link to current head
     } while (!head.compare_exchange_weak(old, n, std::memory_order_release,
                                          std::memory_order_relaxed));
   }
@@ -22,10 +23,12 @@ class TreiberStack {
   Node* pop() {
     Node* old = head.load(std::memory_order_acquire);
     while (old) {
-      Node* next = old->next;
+      Node* next = old->next; // snapshot of next for THIS old
       if (head.compare_exchange_weak(old, next, std::memory_order_acquire,
-                                     std::memory_order_relaxed))
-        return old;
+                                     std::memory_order_relaxed)) {
+        return old; // caller will free/reuse -> ABA risk
+        }
+        // CAS failed: `old` updated to current head; loop recomputes `next`
     }
     return nullptr;
   }

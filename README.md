@@ -39,13 +39,31 @@ The [./src/cpp](./src/cpp/) directory contains the C++ analytic container, which
                     │  │   (Shared, MBs)        │  │           Bigger and slower than L2
                     │  └────────────────────────┘  │
                     └──────────────┬───────────────┘
-                                │
+                                   │
                         Local Memory Controller
-                                │
-                ┌──────────────────┴──────────────────┐
-                │                                     │
-        RAM (NUMA Node 0)                     RAM (NUMA Node 1)
-        ~80ns latency                         ~150ns latency
+                                   │
+                ┌──────────────────┴────────────────────────────────────────────────┐
+                │                                                                   │
+        RAM (NUMA Node 0)                                                   RAM (NUMA Node 1)
+        ~80ns latency                                                        ~150ns latency
+    +---------------------------------------------------------------+
+    |                   MAIN SYSTEM MEMORY (RAM)                    |
+    |         (Shared Address Space for all Cores/Threads)          |
+    |                                                               |
+    |  +---------------------------------------------------------+  |
+    |  | [ STACK ] (Thread 1) | [ STACK ] (Thread 2)             |  |
+    |  | (Local variables, function return addresses)            |  |
+    |  +---------------------------------------------------------+  |
+    |  | [ HEAP ]                                                |  |
+    |  | (Dynamically allocated: new / std::shared_ptr)          |  |
+    |  +---------------------------------------------------------+  |
+    |  | [ DATA SEGMENT ]                                        |  |
+    |  | (Globals, static variables, constexpr mutexes)          |  |
+    |  +---------------------------------------------------------+  |
+    |  | [ CODE SEGMENT ]                                        |  |
+    |  | (Your compiled binary / machine instructions)           |  |
+    |  +---------------------------------------------------------+  |
+    +---------------------------------------------------------------+
 ```
 
 How latency can grow...

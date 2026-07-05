@@ -39,6 +39,7 @@ Obj make_elide() {
 void read_only(const Obj &o) { std::cout << "READ\n"; }
 
 // -------- Case C: Pass by value (copy or move) --------
+// cppcheck-suppress passedByValue
 void take_value(Obj o) { std::cout << "VALUE\n"; }
 
 int main() {

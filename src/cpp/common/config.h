@@ -3,20 +3,20 @@
 #include <utility>
 
 struct AnalyticsConfig {
-  int max_sources;
-  int max_detections;
+  [[maybe_unused]] int max_sources;
+  [[maybe_unused]] int max_detections;
 };
 
 struct ZmqConfig {
-  std::string endpoint;
-  std::string socket_type;
-  std::string subscribe;
-  int rcvhwm;
+  [[maybe_unused]] std::string endpoint;
+  [[maybe_unused]] std::string socket_type;
+  [[maybe_unused]] std::string subscribe;
+  [[maybe_unused]] int rcvhwm;
 };
 
 struct Config {
-  AnalyticsConfig analytics;
-  ZmqConfig zmq;
+  [[maybe_unused]] AnalyticsConfig analytics;
+  [[maybe_unused]] ZmqConfig zmq;
 };
 
 Config load_config(const std::string &path);

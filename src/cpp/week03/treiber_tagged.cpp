@@ -107,15 +107,19 @@ int main() {
 
   // Consumer thread pops all nodes.
   std::atomic<int> popped{0};
+  std::atomic<std::int64_t> value_sum{0};
   std::thread cons([&] {
     int local = 0;
+    std::int64_t local_sum = 0;
     while (local < N) {
-      Node *n = st.pop();
+      const Node *n = st.pop();
       if (!n)
         continue;
+      local_sum += n->value;
       ++local;
     }
     popped.store(local, std::memory_order_release);
+    value_sum.store(local_sum, std::memory_order_release);
   });
 
   prod.join();
@@ -123,6 +127,8 @@ int main() {
 
   auto h = st.head_snapshot();
   std::cout << "Popped: " << popped.load(std::memory_order_acquire) << "\n";
+  std::cout << "Value sum: " << value_sum.load(std::memory_order_acquire)
+            << "\n";
   std::cout << "Final head ptr: " << h.ptr << " tag=" << h.tag << "\n";
 
   // Expect empty stack

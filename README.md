@@ -1,5 +1,7 @@
 # C++ Refresh
 
+[![C++ Pre-commit Checks](https://github.com/syenpark/cpp_refresh/actions/workflows/cpp-precommit.yml/badge.svg)](https://github.com/syenpark/cpp_refresh/actions/workflows/cpp-precommit.yml)
+
 I'm currently brushing up on my C++ skills to prepare for a career as a real-time engineer in the age of AI. Check out [jargon.md](./docs/jargon.md) for the fundamental terms you'll need to know.
 
 > [!IMPORTANT]
@@ -89,6 +91,7 @@ Instruction →
 - [day07](./src/cpp/day07/): automic vs mutex
 - [week02](./src/cpp/week02/): memory ordering
 - [week03](./src/cpp/week03/): lock-free queue
+- [week04](./src/cpp/week04/): micro benchmark
 
 ## Allocators & Cache Behavior (Day 05) [↑](#contents)
 

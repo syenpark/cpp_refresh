@@ -17,9 +17,28 @@ on:
       - ".github/workflows/python-check.yml"
 
 jobs:
+  python-path-check:
+    name: Check Python Path
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check whether src/python exists
+        id: check
+        run: |
+          if [ -d src/python ] && [ -n "$(find src/python -type f \( -name '*.py' -o -name '*.pyi' \) -print -quit)" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
   ruff-lint:
     name: Ruff - Lint
     runs-on: ubuntu-latest
+    needs: python-path-check
+    if: needs.python-path-check.outputs.exists == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -29,14 +48,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: pyproject.toml
+          python-version: "3.14"
+          allow-prereleases: true
 
       - name: Run ruff lint
-        run: uv run -- ruff check --force-exclude src/python
+        run: uv run --group dev -- ruff check --force-exclude src/python
 
   ruff-format:
     name: Ruff - Format
     runs-on: ubuntu-latest
+    needs: python-path-check
+    if: needs.python-path-check.outputs.exists == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -46,14 +68,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: pyproject.toml
+          python-version: "3.14"
+          allow-prereleases: true
 
       - name: Check formatting
-        run: uv run -- ruff format --check --force-exclude src/python
+        run: uv run --group dev -- ruff format --check --force-exclude src/python
 
   mypy:
     name: mypy - Type Check
     runs-on: ubuntu-latest
+    needs: python-path-check
+    if: needs.python-path-check.outputs.exists == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -63,14 +88,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: pyproject.toml
+          python-version: "3.14"
+          allow-prereleases: true
 
       - name: Run mypy
-        run: uv run -- mypy src/python
+        run: uv run --group dev -- mypy src/python
 
   trailing-whitespace:
     name: Trailing Whitespace
     runs-on: ubuntu-latest
+    needs: python-path-check
+    if: needs.python-path-check.outputs.exists == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -80,11 +108,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: pyproject.toml
+          python-version: "3.14"
+          allow-prereleases: true
 
       - name: Run trailing-whitespace-fixer
         run: |
-          find src/python -type f \( -name "*.py" -o -name "*.pyi" \) | xargs uv run -- trailing-whitespace-fixer
+          find src/python -type f \( -name "*.py" -o -name "*.pyi" \) | xargs -r uv run --group dev -- trailing-whitespace-fixer
           if git diff --exit-code; then
             echo "✓ No trailing whitespace found"
           else
@@ -95,6 +124,8 @@ jobs:
   end-of-file-fixer:
     name: End of File Fixer
     runs-on: ubuntu-latest
+    needs: python-path-check
+    if: needs.python-path-check.outputs.exists == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -104,11 +135,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: pyproject.toml
+          python-version: "3.14"
+          allow-prereleases: true
 
       - name: Run end-of-file-fixer
         run: |
-          find src/python -type f \( -name "*.py" -o -name "*.pyi" \) | xargs uv run -- end-of-file-fixer
+          find src/python -type f \( -name "*.py" -o -name "*.pyi" \) | xargs -r uv run --group dev -- end-of-file-fixer
           if git diff --exit-code; then
             echo "✓ All files end with newline"
           else
@@ -119,6 +151,8 @@ jobs:
   check-merge-conflict:
     name: Check Merge Conflicts
     runs-on: ubuntu-latest
+    needs: python-path-check
+    if: needs.python-path-check.outputs.exists == 'true'
     steps:
       - uses: actions/checkout@v4
 
@@ -128,7 +162,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: pyproject.toml
+          python-version: "3.14"
+          allow-prereleases: true
 
       - name: Check merge conflicts
-        run: uv run -- check-merge-conflict --assume-in-merge $(find src/python -type f -name "*.py")
+        run: |
+          find src/python -type f -name "*.py" | \
+            xargs -r uv run --group dev -- check-merge-conflict --assume-in-merge

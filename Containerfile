@@ -1,6 +1,6 @@
 FROM ubuntu:22.04
 
-# To prevent from being asked to put Y
+# To prevent from being asked to type Y (yes)
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \

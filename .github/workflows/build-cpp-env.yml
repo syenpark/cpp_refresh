@@ -17,11 +17,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 💡 깃허브 아이디를 소문자로 변환 (대소문자 꼬임으로 인한 빌드/푸시 에러 방지)
+      - name: Change actor to lowercase
+        id: actor_lower
+        run: |
+          echo "username=$(echo '${{ github.actor }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Log in to GitHub Container Registry with Podman
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ steps.actor_lower.outputs.username }}" --password-stdin
 
       - name: Build and push Podman image
         run: |
-          image="ghcr.io/${{ github.actor }}/mle-cpp-env:latest"
-          podman build --file ./Containerfile --tag "$image" .
+          # 💡 이미지 주소를 소문자 기준으로 생성
+          image="ghcr.io/${{ steps.actor_lower.outputs.username }}/mle-cpp-env:latest"
+
+          # 💡 [핵심] --label을 통해 이미지와 리포지토리를 명시적으로 연결 (로컬 403 에러 완벽 해결)
+          podman build \
+            --file ./Containerfile \
+            --tag "$image" \
+            --label "org.opencontainers.image.source=https://github.com{{ github.repository }}" \
+            .
+
           podman push "$image"

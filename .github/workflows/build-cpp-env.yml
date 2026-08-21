@@ -34,14 +34,22 @@ jobs:
 
       - name: Build and push Podman image (Multi-platform)
         run: |
-          # 💡 이미지 주소를 소문자 기준으로 생성
-          image="ghcr.io/${{ steps.actor_lower.outputs.username }}/mle-cpp-env:latest"
+          IMAGE_NAME="ghcr.io/${{ steps.actor_lower.outputs.username }}/mle-cpp-env:latest"
 
+          # 1. 멀티 아키텍처를 묶어줄 빈 매니페스트 리스트(컨테이너 주소) 생성
+          podman manifest create "$IMAGE_NAME"
+
+          # 2. 인텔/AMD(amd64)용 이미지 빌드 후 매니페스트에 추가
           podman build \
-            --platform linux/amd64,linux/arm64 \
+            --platform linux/amd64 \
             --file ./Containerfile \
-            --tag "$image" \
-            --label "org.opencontainers.image.source=https://github.com{{ github.repository }}" \
-            .
+            --manifest "$IMAGE_NAME" .
 
-          podman push "$image"
+          # 3. 맥북 M시리즈(arm64)용 이미지 빌드 후 매니페스트에 추가
+          podman build \
+            --platform linux/arm64 \
+            --file ./Containerfile \
+            --manifest "$IMAGE_NAME" .
+
+          # 4. 묶여진 매니페스트 리스트 전체를 한 번에 GitHub Packages로 푸시
+          podman manifest push --all "$IMAGE_NAME" "docker://$IMAGE_NAME"

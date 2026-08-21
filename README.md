@@ -7,6 +7,25 @@ I'm currently brushing up on my C++ skills to prepare for a career as a real-tim
 > [!IMPORTANT]
 The [./src/cpp](./src/cpp/) directory contains the C++ analytic container, which serves as the core of this repository, rewriting the original Python implementation for improved performance. For more details, see the [./src/cpp/README.md](./src/cpp/README.md).
 
+## Download the Built Container
+
+The [`Build MLE Cpp Container`](./.github/workflows/build-cpp-env.yml) workflow builds the image and publishes it to the GitHub Container Registry when `Containerfile` changes are pushed to `main`.
+
+Sign in to GHCR with a GitHub token that has package read access, then pull the latest image:
+
+```bash
+echo "$GITHUB_TOKEN" | podman login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+podman pull ghcr.io/syenpark/mle-cpp-env:latest
+```
+
+Run the downloaded container with the repository mounted at `/workspace`:
+
+```bash
+podman run --rm -it \
+    -v "$PWD:/workspace" \
+    ghcr.io/syenpark/mle-cpp-env:latest
+```
+
 ## Contents
 
 - [Battlefield](#battlefield-)

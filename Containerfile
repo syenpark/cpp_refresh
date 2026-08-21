@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     tmux \
     htop \
+    sysstat \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

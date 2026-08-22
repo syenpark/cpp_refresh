@@ -8,11 +8,12 @@ requires-python = ">=3.14"
 dependencies = [
     "psutil>=6.1.1",
     "pyzmq>=27.1.0",
+    "torch",
     "typer>=0.21.1",
 ]
 
 [project.scripts]
-dummy_yolo = "python._cli:app"
+train = "training.train:main"
 
 [project.urls]
 Repository = "https://github.com/syenpark/cpp_refresh"
@@ -49,14 +50,13 @@ strict = true
 
 [tool.mypy]
 ignore_missing_imports = true
-mypy_path = ["src/python"]
+mypy_path = ["src/py"]
 namespace_packages = true
 explicit_package_bases = true
 exclude = [
     "build/",
     "dist/",
     ".venv/",
-    "src/python/__main__.py",
 ]
 
 [tool.pytest.ini_options]
@@ -74,7 +74,7 @@ source = ["python"]
 show_missing = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/python"]
+packages = ["src/py", "training"]
 
 [build-system]
 requires = ["hatchling"]

@@ -18,6 +18,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.14'
+
+      - name: Build project wheel
+        run: uv build --wheel --python 3.14 --out-dir ./training/dist .
+
       - name: Lowercase actor
         id: actor_lower
         run: |
@@ -47,6 +55,7 @@ jobs:
 
           podman build \
             --platform linux/arm64 \
+            --security-opt seccomp=unconfined \
             --file ./training/Containerfile \
             --manifest "$IMAGE_NAME" \
             ./training

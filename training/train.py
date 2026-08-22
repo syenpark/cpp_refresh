@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import torch
 import torch.distributed as dist
-from src.py.utils.custom_logging import SetLogger
+
+from py.utils.custom_logging import SetLogger
 
 logger = SetLogger().logger
 

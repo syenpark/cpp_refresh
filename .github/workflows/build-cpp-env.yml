@@ -34,7 +34,7 @@ jobs:
 
       - name: Build and push Podman image (Multi-platform)
         run: |
-          IMAGE_NAME="ghcr.io/${{ steps.actor_lower.outputs.username }}/mle-cpp-env:latest"
+          IMAGE_NAME="ghcr.io/${{ steps.actor_lower.outputs.username }}/linux-cpp-env:latest"
 
           # 1. 멀티 아키텍처를 묶어줄 빈 매니페스트 리스트(컨테이너 주소) 생성
           podman manifest create "$IMAGE_NAME"

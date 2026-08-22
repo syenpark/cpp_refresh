@@ -15,7 +15,7 @@ Sign in to GHCR with a GitHub token that has package read access, then pull the 
 
 ```bash
 echo "$GITHUB_TOKEN" | podman login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-podman pull ghcr.io/syenpark/mle-cpp-env:latest
+podman pull ghcr.io/syenpark/linux-cpp-env:latest
 ```
 
 Run the downloaded container with the repository mounted at `/workspace`:
@@ -24,7 +24,7 @@ Run the downloaded container with the repository mounted at `/workspace`:
 podman run --rm -it \
     -v "$PWD:/workspace" \
     --cap-add=SYS_PTRACE \
-    ghcr.io/syenpark/mle-cpp-env:latest
+    ghcr.io/syenpark/linux-cpp-env:latest
 ```
 
 ## Create the Linux Systems Lab Cluster on Mac M2

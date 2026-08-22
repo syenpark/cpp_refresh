@@ -9,7 +9,7 @@ The [./src/cpp](./src/cpp/) directory contains the C++ analytic container, which
 
 ## Download the Built Container
 
-The [`Build MLE Cpp Container`](./.github/workflows/build-cpp-env.yml) workflow builds the image and publishes it to the GitHub Container Registry when `Containerfile` changes are pushed to `main`.
+The [`Build Linux Systems Lab`](./.github/workflows/build-cpp-env.yml) workflow builds the image and publishes it to the GitHub Container Registry when [`linux/Containerfile`](./linux/Containerfile) changes are pushed to `main`.
 
 Sign in to GHCR with a GitHub token that has package read access, then pull the latest image:
 

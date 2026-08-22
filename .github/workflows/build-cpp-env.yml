@@ -1,10 +1,10 @@
-name: Build MLE Cpp Container
+name: Build Linux Systems Lab
 
 on:
   push:
     branches: [ "main" ]
     paths:
-      - 'Containerfile'
+      - 'linux/Containerfile'
       - '.github/workflows/build-cpp-env.yml'
 
 jobs:
@@ -42,13 +42,13 @@ jobs:
           # 2. 인텔/AMD(amd64)용 이미지 빌드 후 매니페스트에 추가
           podman build \
             --platform linux/amd64 \
-            --file ./Containerfile \
+            --file ./linux/Containerfile \
             --manifest "$IMAGE_NAME" .
 
           # 3. 맥북 M시리즈(arm64)용 이미지 빌드 후 매니페스트에 추가
           podman build \
             --platform linux/arm64 \
-            --file ./Containerfile \
+            --file ./linux/Containerfile \
             --manifest "$IMAGE_NAME" .
 
           # 4. 묶여진 매니페스트 리스트 전체를 한 번에 GitHub Packages로 푸시

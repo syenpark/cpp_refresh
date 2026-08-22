@@ -11,6 +11,12 @@ RUN apt-get update && apt-get install -y \
     tmux \
     htop \
     sysstat \
+    procps \
+    strace \
+    lsof \
+    iproute2 \
+    iputils-ping \
+    psmisc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

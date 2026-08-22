@@ -23,6 +23,7 @@ Run the downloaded container with the repository mounted at `/workspace`:
 ```bash
 podman run --rm -it \
     -v "$PWD:/workspace" \
+    --cap-add=SYS_PTRACE \
     ghcr.io/syenpark/mle-cpp-env:latest
 ```
 

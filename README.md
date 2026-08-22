@@ -5,26 +5,38 @@
 I'm currently brushing up on my C++ skills to prepare for a career as a real-time engineer in the age of AI. Check out [jargon.md](./docs/jargon.md) for the fundamental terms you'll need to know.
 
 > [!IMPORTANT]
-The [./src/cpp](./src/cpp/) directory contains the C++ analytic container, which serves as the core of this repository, rewriting the original Python implementation for improved performance. For more details, see the [./src/cpp/README.md](./src/cpp/README.md).
+The [./src/cpp](./src/cpp/) directory contains the C++ analytics bootstrap. It focuses on CMake, ZeroMQ, configuration, JSON decoding, and low-latency systems concepts. For more details, see the [./src/cpp/README.md](./src/cpp/README.md).
 
-## Download the Built Container
+## Download the Built Images
 
 The [`Build Linux Systems Lab`](./.github/workflows/build-cpp-env.yml) workflow builds the image and publishes it to the GitHub Container Registry when [`linux/Containerfile`](./linux/Containerfile) changes are pushed to `main`.
 
-Sign in to GHCR with a GitHub token that has package read access, then pull the latest image:
+The [`Build PyTorch DDP Container`](./.github/workflows/build-training-env.yml) workflow builds the training image and publishes it when the `training/` files change.
+
+Sign in to GHCR with a GitHub token that has package read access, then pull the latest images:
 
 ```bash
 echo "$GITHUB_TOKEN" | podman login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 podman pull ghcr.io/syenpark/linux-cpp-env:latest
+podman pull ghcr.io/syenpark/pytorch-ddp:latest
 ```
 
-Run the downloaded container with the repository mounted at `/workspace`:
+Run the Linux Systems Lab image with the repository mounted at `/workspace`:
 
 ```bash
 podman run --rm -it \
     -v "$PWD:/workspace" \
     --cap-add=SYS_PTRACE \
     ghcr.io/syenpark/linux-cpp-env:latest
+```
+
+Run the PyTorch DDP training image with two processes:
+
+```bash
+podman run --rm -it \
+    --network host \
+    ghcr.io/syenpark/pytorch-ddp:latest \
+    torchrun --standalone --nproc-per-node=2 -m training.train
 ```
 
 ## Create the Linux Systems Lab Cluster on Mac M2
@@ -49,11 +61,12 @@ kubectl cluster-info --context kind-mle-lab
 
 ## Contents
 
+- [Download the Built Images](#download-the-built-images)
+- [Create the Linux Systems Lab Cluster](#create-the-linux-systems-lab-cluster-on-mac-m2)
 - [Battlefield](#battlefield-)
 - [Topics](#topics-)
 - [Allocators & Cache Behavior (Day 05)](#allocators--cache-behavior-day-05-)
 - [Practical Application: Video Analytics](#practical-application-video-analytics-)
-- [Create the Linux Systems Lab Cluster](#create-the-linux-systems-lab-cluster)
 
 ## Battlefield [↑](#contents)
 
@@ -129,7 +142,7 @@ Instruction →
 - [day02](./src/cpp/day02/): reference vs copy
 - [day03](./src/cpp/day03/): elide vs move vs copy
 - [day04](./src/cpp/day04/): STL Containers & API Design
-- [day07](./src/cpp/day07/): automic vs mutex
+- [day07](./src/cpp/day07/): atomic vs mutex
 - [week02](./src/cpp/week02/): memory ordering
 - [week03](./src/cpp/week03/): lock-free queue
 - [week04](./src/cpp/week04/): micro benchmark
@@ -141,7 +154,7 @@ Instruction →
 
 ### What an allocator actually is
 
-An `allocator` answers two questons:
+An `allocator` answers two questions:
 
 1. Where do I get memory?
 2. How fast and predictable is it?
@@ -155,7 +168,7 @@ Problems:
     - lock contention
     - heap fragmentation
     - unpredictable pauses
-    - cache-unfriendly resue
+    - cache-unfriendly reuse
 
 ### The memory hierarchy
 
@@ -167,7 +180,7 @@ L3 cache   (~10–15 ns)
 RAM        (~100 ns)
 ```
 
-One RAM access = hundres of CPU instructions, so a cache miss hurts more than a copy.
+One RAM access = hundreds of CPU instructions, so a cache miss hurts more than a copy.
 
 ### Cache lines
 
@@ -201,30 +214,26 @@ Group hot data together.
 
 ## Practical Application: Video Analytics [↑](#contents)
 
-Based on my experience, fine-tuning pre-trained AI models for specific applications is becoming increasingly straightforward, thanks to the optimization of inference frameworks, particularly on GPUs.
+This repository also includes a small PyTorch distributed-training example in [`training/train.py`](./training/train.py), packaged and exposed as the `train` command through [`pyproject.toml`](./pyproject.toml).
 
 As model inference becomes faster and more efficient, the true bottleneck often shifts to data flow and real-time decision-making within the Python-based container. Python's inherent inefficiencies in the post-processing layer, especially on hot paths, can significantly hinder performance.
 
 In AI-heavy applications—such as video streaming, autonomous driving, smart cities, and trading—optimizing everything beyond inference is critical. C++ plays a key role in eliminating these inefficiencies and squeezing out those final milliseconds. Therefore, I will simulate the Python hot path for processing object detection metadata and re-implement it in C++ to achieve the performance gains needed for real-time applications.
 
-The directory [./src/python/yolo/inference](./src/python/yolo/inference/) will simulate Ultralytics YOLO's inference and generate dummy metadata, which is used in the analytics layer (In real-world applications, this metadata loop is handled by NVIDIA DeepStream, which is highly optimized).
+Install the Python dependencies and run the example locally with uv:
 
-The Python implementation will serve as a reference for the [analytics](./src/python/yolo/analytics/) pipeline, which I will later re-implement in C++ to optimize the performance of time-critical operations in real-time systems.
-
-```shell
-# Inference container is just to simulate metadata generation in quicik.
-# In real world applications, I used the highly optimized NVIDIA DeepStream.
-+----------------------------+        +----------------------+
-|   Inference Container      |        |  Analytics Container | : This is where I will re-write
-|  (Dummy Ultralytics YOLO)  |        | (Processing Metadata)|
-|                            |        |                      |
-|  - Pretend YOLO Inference  |        | - Process Metadata   |
-|  - Generate Dummy Metadata |  ----> | - Analytics Logic    |
-|                            |        |                      |
-+----------------------------+        +----------------------+
+```bash
+uv sync
+uv run train
 ```
 
-More details, please check [./src/python/yolo/inference/README.md](./src/python/yolo/inference/README.md) for inference container, [./src/python/yolo/analytics/README.md](./src/python/yolo/analytics/README.md) for analytics container written in Python.
+For multi-process execution, launch it with `torchrun` and set the desired process count:
+
+```shell
+torchrun --standalone --nproc-per-node=2 -m training.train
+```
+
+The training image is built by the [`Build PyTorch DDP Container`](./.github/workflows/build-training-env.yml) workflow. CI builds the project wheel with uv and installs the wheel in the container.
 
 ### Hot loop
 

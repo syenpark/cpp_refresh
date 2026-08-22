@@ -27,12 +27,33 @@ podman run --rm -it \
     ghcr.io/syenpark/mle-cpp-env:latest
 ```
 
+## Create the Linux Systems Lab Cluster on Mac M2
+
+Install kind and kubectl with Homebrew:
+
+```bash
+brew install kind kubectl
+```
+
+Create a kind cluster using Podman as the container provider:
+
+```bash
+KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster --name mle-lab
+```
+
+Verify the cluster using its kubectl context:
+
+```bash
+kubectl cluster-info --context kind-mle-lab
+```
+
 ## Contents
 
 - [Battlefield](#battlefield-)
 - [Topics](#topics-)
 - [Allocators & Cache Behavior (Day 05)](#allocators--cache-behavior-day-05-)
 - [Practical Application: Video Analytics](#practical-application-video-analytics-)
+- [Create the Linux Systems Lab Cluster](#create-the-linux-systems-lab-cluster)
 
 ## Battlefield [↑](#contents)
 

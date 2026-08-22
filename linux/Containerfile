@@ -3,7 +3,8 @@ FROM ubuntu:22.04
 # To prevent from being asked to type Y (yes)
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update -o Acquire::Retries=3 && apt-get install -y \
+    --no-install-recommends \
     build-essential \
     cmake \
     git \

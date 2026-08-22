@@ -42,12 +42,14 @@ jobs:
           # 2. 인텔/AMD(amd64)용 이미지 빌드 후 매니페스트에 추가
           podman build \
             --platform linux/amd64 \
+            --security-opt seccomp=unconfined \
             --file ./linux/Containerfile \
             --manifest "$IMAGE_NAME" .
 
           # 3. 맥북 M시리즈(arm64)용 이미지 빌드 후 매니페스트에 추가
           podman build \
             --platform linux/arm64 \
+            --security-opt seccomp=unconfined \
             --file ./linux/Containerfile \
             --manifest "$IMAGE_NAME" .
 

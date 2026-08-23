@@ -1,55 +1,80 @@
+# Kubernetes Lab
 
-# Kubernetes Job Lab
+Local Kubernetes practice environment using **kind + Podman** on an M2 MacBook.
 
-This directory contains a small Kubernetes `Job` that runs to completion after
-printing start and finish messages. It is useful for practicing basic Job
-creation, status inspection, and cleanup with the local kind cluster.
+## Cluster
 
-## Prerequisites
-
-- A running Kubernetes cluster
-- `kubectl` configured for that cluster
-
-The repository's kind cluster uses the `kind-mle-lab` context. Select it before
-running the commands below if needed:
+Start Podman and the existing kind cluster:
 
 ```bash
+podman machine start
+podman start mle-lab-control-plane
+
 kubectl config use-context kind-mle-lab
+kubectl get nodes
 ```
 
-## Run the Job
+## Controller vs Execution
 
-The checked-in manifest is [`job.yaml`](./job.yaml). Apply it and wait for the
-Job to complete:
+In this Kubernetes context:
+
+Controller = manages the desired state.
+Execution = the Pod/container actually doing the work.
+
+For your Job:
 
 ```bash
-kubectl apply -f job.yaml
-kubectl wait --for=condition=complete job/finite-job --timeout=60s
+Job: finite-job               ← controller-level object
+       │
+       │ creates/manages
+       ▼
+Pod: finite-job-jflkr         ← execution-level object
+       │
+       ▼
+busybox container
+       │
+       ▼
+your shell command
 ```
 
-Inspect the Job and read its pod logs:
+So:
 
 ```bash
-kubectl get job finite-job
-kubectl logs job/finite-job
+kubectl get jobs
 ```
 
-Expected output:
+answers: “Has the requested work completed successfully?”
 
-```text
-job started
-job finished
-```
-
-Remove the completed Job when finished:
+Whereas:
 
 ```bash
-kubectl delete -f job.yaml
+kubectl get pods
 ```
 
-## Regenerate the Manifest
+answers: “What is happening to the thing actually executing the workload?”
 
-To recreate `job.yaml` from the command line:
+For example:
+
+```bash
+JOB                         POD
+finite-job                  finite-job-jflkr
+Complete                    Completed
+1/1 completion              container exited 0
+```
+
+One precision: Pod is the Kubernetes execution unit; the actual OS execution is ultimately the container process(es) inside that Pod.
+
+So a useful hierarchy is:
+
+```bash
+Controller → Pod → Container → Process
+```
+
+## Job vs Deployment Lab
+
+### Job
+
+Generate a manifest:
 
 ```bash
 kubectl create job finite-job \
@@ -58,4 +83,71 @@ kubectl create job finite-job \
   -o yaml \
   -- sh -c 'echo "job started"; sleep 5; echo "job finished"' \
   > job.yaml
+```
+
+Apply and observe:
+
+```bash
+kubectl apply -f job.yaml
+kubectl get jobs
+kubectl get pods -w
+```
+
+A successful finite workload reaches `Completed`.
+
+### Deployment
+
+Generate a manifest:
+
+```bash
+kubectl create deployment finite-deployment \
+  --image=busybox:1.36 \
+  --dry-run=client \
+  -o yaml \
+  > deployment.yaml
+```
+
+Amend the container to run the same finite command, then:
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl get deployments
+kubectl get pods -w
+```
+
+Observe the container restart after the finite process exits.
+
+## Key Concepts
+
+```text
+Job
+→ finite work
+→ exit 0
+→ completion satisfied
+
+Deployment
+→ continuously running workload
+→ process exits
+→ container restarted
+```
+
+Useful commands:
+
+```bash
+kubectl get jobs       # Job/controller state
+kubectl get pods       # Pod/execution state
+kubectl get pods -w    # Watch state changes
+kubectl describe pod <pod>
+kubectl logs <pod>
+```
+
+`--context` selects the Kubernetes context. Once `kind-mle-lab` is the current context, it can be omitted.
+
+The compact mental model is:
+
+```bash
+--context  → WHERE?
+get jobs   → controller state?
+get pods   → execution state?
+-w         → keep watching changes?
 ```

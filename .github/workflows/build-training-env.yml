@@ -6,6 +6,7 @@ on:
     paths:
       - 'training/**'
       - '.github/workflows/build-training-env.yml'
+      - pyproject.toml
 
 jobs:
   build-and-push:

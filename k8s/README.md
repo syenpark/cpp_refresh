@@ -1,10 +1,8 @@
-# Kubernetes Lab
+# Kubernetes Lab — Job vs Deployment
 
-Local Kubernetes practice environment using **kind + Podman** on an M2 MacBook.
+Local Kubernetes lab using **kind + Podman** on an M2 MacBook.
 
-## Cluster
-
-Start Podman and the existing kind cluster:
+## Start the Cluster
 
 ```bash
 podman machine start
@@ -14,67 +12,32 @@ kubectl config use-context kind-mle-lab
 kubectl get nodes
 ```
 
-## Controller vs Execution
-
-In this Kubernetes context:
-
-Controller = manages the desired state.
-Execution = the Pod/container actually doing the work.
-
-For your Job:
+## Useful `kubectl` Concepts
 
 ```bash
-Job: finite-job               ← controller-level object
-       │
-       │ creates/manages
-       ▼
-Pod: finite-job-jflkr         ← execution-level object
-       │
-       ▼
-busybox container
-       │
-       ▼
-your shell command
+kubectl get jobs       # Controller/workload state
+kubectl get pods       # Execution state
+kubectl get pods -w    # Watch Pod state changes
 ```
 
-So:
+Mental model:
 
-```bash
-kubectl get jobs
-```
-
-answers: “Has the requested work completed successfully?”
-
-Whereas:
-
-```bash
-kubectl get pods
-```
-
-answers: “What is happening to the thing actually executing the workload?”
-
-For example:
-
-```bash
-JOB                         POD
-finite-job                  finite-job-jflkr
-Complete                    Completed
-1/1 completion              container exited 0
-```
-
-One precision: Pod is the Kubernetes execution unit; the actual OS execution is ultimately the container process(es) inside that Pod.
-
-So a useful hierarchy is:
-
-```bash
+```text
 Controller → Pod → Container → Process
 ```
 
-## Job vs Deployment Lab
+* **Job/Deployment**: manages desired state.
+* **Pod**: Kubernetes execution unit.
+* **Container**: runs inside the Pod.
+* **Process**: actual application execution.
 
-### Job
+`--context` selects which Kubernetes cluster/context to use. Once `kind-mle-lab` is the current context, it can be omitted.
 
-Generate a manifest:
+---
+
+## Job Lab
+
+Generate:
 
 ```bash
 kubectl create job finite-job \
@@ -85,6 +48,15 @@ kubectl create job finite-job \
   > job.yaml
 ```
 
+Relevant configuration:
+
+```yaml
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+```
+
 Apply and observe:
 
 ```bash
@@ -93,11 +65,19 @@ kubectl get jobs
 kubectl get pods -w
 ```
 
-A successful finite workload reaches `Completed`.
+Expected:
 
-### Deployment
+```text
+Running → Completed
+```
 
-Generate a manifest:
+A successful process exits `0`, satisfying the Job's completion requirement.
+
+---
+
+## Deployment Lab
+
+Generate:
 
 ```bash
 kubectl create deployment finite-deployment \
@@ -107,7 +87,29 @@ kubectl create deployment finite-deployment \
   > deployment.yaml
 ```
 
-Amend the container to run the same finite command, then:
+Amend the container:
+
+```yaml
+spec:
+  replicas: 1
+
+  template:
+    spec:
+      restartPolicy: Always
+
+      containers:
+        - name: busybox
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "started"
+              sleep 5
+              echo "finished"
+```
+
+Apply and observe:
 
 ```bash
 kubectl apply -f deployment.yaml
@@ -115,39 +117,111 @@ kubectl get deployments
 kubectl get pods -w
 ```
 
-Observe the container restart after the finite process exits.
+Observed behavior:
 
-## Key Concepts
+```text
+Running
+→ Completed
+→ restarted
+→ Running
+→ Completed
+→ CrashLoopBackOff
+→ restarted...
+```
+
+The process exits successfully, but the Deployment expects a continuously running replica.
+
+---
+
+## Job vs Deployment
 
 ```text
 Job
-→ finite work
-→ exit 0
+finite process exits 0
 → completion satisfied
+→ no restart
 
 Deployment
-→ continuously running workload
-→ process exits
+finite process exits 0
+→ restartPolicy: Always
 → container restarted
+→ repeated termination
+→ restart backoff
 ```
 
-Useful commands:
+Use a **Job** for finite workloads such as training/batch processing.
+
+Use a **Deployment** for continuously running workloads such as inference services.
+
+---
+
+## CrashLoopBackOff
+
+`CrashLoopBackOff` does **not necessarily mean the application crashed**.
+
+It means the container repeatedly terminates after Kubernetes restarts it, so Kubernetes applies increasing delay before subsequent restart attempts.
+
+To determine **why the process terminated**:
 
 ```bash
-kubectl get jobs       # Job/controller state
-kubectl get pods       # Pod/execution state
-kubectl get pods -w    # Watch state changes
-kubectl describe pod <pod>
-kubectl logs <pod>
+kubectl describe pod <pod-name>
 ```
 
-`--context` selects the Kubernetes context. Once `kind-mle-lab` is the current context, it can be omitted.
+Check:
 
-The compact mental model is:
+```text
+Last State:   Terminated
+Reason:       Completed
+Exit Code:    0
+```
+
+Successful termination:
+
+```text
+Reason:     Completed
+Exit Code:  0
+```
+
+Application failure:
+
+```text
+Reason:     Error
+Exit Code:  1
+```
+
+Example OOM termination:
+
+```text
+Reason:     OOMKilled
+Exit Code:  137
+```
+
+Also inspect the previous container's logs:
 
 ```bash
---context  → WHERE?
-get jobs   → controller state?
-get pods   → execution state?
--w         → keep watching changes?
+kubectl logs <pod-name> --previous
+```
+
+Troubleshooting mental model:
+
+```text
+CrashLoopBackOff
+        ↓
+"Container keeps terminating"
+
+        ≠
+
+"Application definitely crashed"
+```
+
+Always ask:
+
+```text
+Why did the previous process terminate?
+        ↓
+kubectl describe pod
+        +
+kubectl logs --previous
+        ↓
+Reason + Exit Code + logs
 ```

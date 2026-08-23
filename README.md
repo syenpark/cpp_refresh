@@ -59,7 +59,7 @@ Verify the cluster using its kubectl context:
 kubectl cluster-info --context kind-mle-lab
 ```
 
-For Kubernetes lab practice, see the [Kubernetes Job Lab](./k8s/README.md).
+For Kubernetes lab practice, see the [Kubernetes Lab](./k8s/README.md).
 
 ## Contents
 

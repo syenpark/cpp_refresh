@@ -216,7 +216,7 @@ Group hot data together.
 
 ## Practical Application: Video Analytics [↑](#contents)
 
-This repository also includes a small PyTorch distributed-training example in [`training/train.py`](./training/train.py), packaged and exposed as the `train` command through [`pyproject.toml`](./pyproject.toml).
+This repository also includes PyTorch distributed-training and M2 GPU timing experiments in [`training/`](./training/). See the [training guide](./training/README.md) for details.
 
 As model inference becomes faster and more efficient, the true bottleneck often shifts to data flow and real-time decision-making within the Python-based container. Python's inherent inefficiencies in the post-processing layer, especially on hot paths, can significantly hinder performance.
 
@@ -227,6 +227,12 @@ Install the Python dependencies and run the example locally with uv:
 ```bash
 uv sync
 uv run train
+```
+
+Run the M2 GPU timing example:
+
+```bash
+uv run python training/gpu_inference_timing.py
 ```
 
 For multi-process execution, launch it with `torchrun` and set the desired process count:

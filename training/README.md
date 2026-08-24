@@ -2,9 +2,7 @@
 
 PyTorch distributed-training and GPU timing experiments.
 
-<!-- markdownlint-disable MD033 -->
-<details>
-<summary><b>Files</b></summary>
+## Files
 
 ```text
 training/
@@ -15,8 +13,7 @@ training/
 └── README.md
 ```
 
-</details>
-
+<!-- markdownlint-disable MD033 -->
 <details>
 <summary><b>DDP Smoke Test</b></summary>
 

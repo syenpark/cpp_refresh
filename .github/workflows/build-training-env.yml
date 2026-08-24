@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - 'training/**'
+      - '!training/README.md'
       - '.github/workflows/build-training-env.yml'
       - pyproject.toml
 

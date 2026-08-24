@@ -1,8 +1,21 @@
-# C++ Refresh
+# C++ Refresh: A Systems-Oriented ML Infrastructure Lab
 
 [![C++ Pre-commit Checks](https://github.com/syenpark/cpp_refresh/actions/workflows/cpp-precommit.yml/badge.svg)](https://github.com/syenpark/cpp_refresh/actions/workflows/cpp-precommit.yml)
 
-I'm currently brushing up on my C++ skills to prepare for a career as a real-time engineer in the age of AI. Check out [jargon.md](./docs/jargon.md) for the fundamental terms you'll need to know.
+A hands-on engineering lab exploring **C++, low-latency data processing, and distributed ML systems**.
+
+Modern ML systems are increasingly limited not only by model inference, but also by everything around the model:
+
+- data movement
+- serialization/deserialization
+- memory behavior
+- CPU efficiency
+- process communication
+- resource utilization
+
+This project focuses on understanding and optimizing these system-level bottlenecks by building components explicitly from the ground up.
+
+The goal is not to hide complexity behind frameworks, but to build intuition about what happens underneath them.
 
 > [!IMPORTANT]
 The [./src/cpp](./src/cpp/) directory contains the C++ analytics bootstrap. It focuses on CMake, ZeroMQ, configuration, JSON decoding, and low-latency systems concepts. For more details, see the [./src/cpp/README.md](./src/cpp/README.md).

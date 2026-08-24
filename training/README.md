@@ -12,15 +12,6 @@ training/
 └── README.md
 ```
 
-## Build the Training Image
-
-```bash
-podman build \
-  -t ghcr.io/syenpark/pytorch-ddp:latest \
-  -f training/Containerfile \
-  .
-```
-
 ## DDP Smoke Test
 
 Run inside Podman:
@@ -33,6 +24,11 @@ podman run --rm -it \
     --nproc-per-node=2 \
     -m training.train
 ```
+
+Here:
+
+* `--standalone` runs the distributed job on one server/node and configures worker coordination automatically.
+* `--nproc-per-node=2` starts two training processes on that node.
 
 Validates:
 
@@ -131,6 +127,21 @@ CPU submission time
 ≠
 GPU completion time
 ```
+
+## DistributedSampler Demo
+
+Run with four distributed worker processes:
+
+```bash
+podman run --rm -it \
+  ghcr.io/syenpark/pytorch-ddp:latest \
+  torchrun \
+    --standalone \
+    --nproc-per-node=4 \
+    -m training.distributed_sampler_demo
+```
+
+The demo creates a dataset containing 16 samples and uses `DistributedSampler` to give each worker a different subset. With four workers, each rank receives four samples.
 
 ## Environment
 

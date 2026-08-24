@@ -2,17 +2,23 @@
 
 PyTorch distributed-training and GPU timing experiments.
 
-## Files
+<!-- markdownlint-disable MD033 -->
+<details>
+<summary><b>Files</b></summary>
 
 ```text
 training/
 ├── train.py
 ├── dataloader_benchmark.py
+├── distributed_sampler_demo.py
 ├── gpu_inference_timing.py
 └── README.md
 ```
 
-## DDP Smoke Test
+</details>
+
+<details>
+<summary><b>DDP Smoke Test</b></summary>
 
 Run inside Podman:
 
@@ -38,7 +44,29 @@ Validates:
 * Gloo
 * AllReduce
 
-## DataLoader / CPU Contention Lab
+```bash
+torchrun
+    |
+    +-- process rank 0
+    |
+    +-- process rank 1
+    |
+    +-- process rank N
+             |
+             ↓
+    dist.init_process_group()
+             |
+             ↓
+       AllReduce
+```
+
+It proves:
+
+"Can multiple PyTorch processes communicate correctly?"
+</details>
+
+<details>
+<summary><b>DataLoader / CPU Contention Lab</b></summary>
 
 Run with different worker counts:
 
@@ -79,7 +107,10 @@ too many workers
 → throughput may degrade
 ```
 
-## Observe CPU Pressure
+</details>
+
+<details>
+<summary><b>Observe CPU Pressure</b></summary>
 
 From another shell/container, inspect:
 
@@ -106,7 +137,10 @@ Consider:
 * compute inefficiency
 * infrastructure limits
 
-## GPU Timing on M2
+</details>
+
+<details>
+<summary><b>GPU Timing on M2</b></summary>
 
 Run locally on macOS:
 
@@ -128,7 +162,10 @@ CPU submission time
 GPU completion time
 ```
 
-## DistributedSampler Demo
+</details>
+
+<details>
+<summary><b>DistributedSampler Demo</b></summary>
 
 Run with four distributed worker processes:
 
@@ -142,8 +179,10 @@ podman run --rm -it \
 ```
 
 The demo creates a dataset containing 16 samples and uses `DistributedSampler` to give each worker a different subset. With four workers, each rank receives four samples.
+</details>
 
-## Environment
+<details>
+<summary><b>Environment</b></summary>
 
 ```text
 M2 MacBook
@@ -154,3 +193,5 @@ M2 MacBook
 ```
 
 Use the Linux Podman container for DDP experiments. Use MPS locally for GPU timing experiments.
+</details>
+<!-- markdownlint-enable MD033 -->

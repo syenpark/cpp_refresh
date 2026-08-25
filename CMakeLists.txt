@@ -11,6 +11,7 @@ pkg_check_modules(ZMQ REQUIRED libzmq)
 add_executable(analytics
     src/cpp/analytics/main.cpp
     src/cpp/common/config.cpp
+    src/cpp/lab/producer_consumer.cpp
 )
 
 target_include_directories(analytics PRIVATE

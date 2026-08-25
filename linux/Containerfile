@@ -6,6 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -o Acquire::Retries=3 && apt-get install -y \
     --no-install-recommends \
     build-essential \
+    vim \
     cmake \
     git \
     curl \

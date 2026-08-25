@@ -16,7 +16,7 @@ std::condition_variable cv;
 bool done = false;
 
 void producer() {
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < 1000; ++i) {
     {
       std::lock_guard<std::mutex> lock(mutex);
       queue.push(i);

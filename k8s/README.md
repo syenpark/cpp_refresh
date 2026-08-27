@@ -225,3 +225,46 @@ kubectl logs --previous
         ↓
 Reason + Exit Code + logs
 ```
+
+## Resource requests
+
+```bash
+kubectl run impossible-request \
+  --image=busybox:1.36 \
+  --restart=Never \
+  --dry-run=client -o yaml > resource-demo.yaml
+```
+
+Then, amend [./resource-demo.yaml](./resource-demo.yaml) with a resources block the node can't satisfy:
+
+```yaml
+spec:
+  containers:
+    - name: impossible-request
+      image: busybox:1.36
+      command: ["sh", "-c", "sleep 300"]
+      resources:
+        requests:
+          cpu: "6"
+          memory: "4Gi"
+        limits:
+          cpu: "6"
+          memory: "4Gi"
+```
+
+`requests` are what the scheduler uses to decide placement; `limits` are what the kubelet enforces at runtime. Setting both equal gives guaranteed, QoS-level CPU. Applying the amended manifest will leave the pod `Pending`. Then:
+
+```bash
+kubectl apply -f resource-demo.yaml
+kubectl get pods
+kubectl describe pod impossible-request
+```
+
+Then,
+
+```bash
+Events:
+  Type     Reason            Age   From               Message
+  ----     ------            ----  ----               -------
+  Warning  FailedScheduling  13s   default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+```

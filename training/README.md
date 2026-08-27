@@ -13,9 +13,7 @@ training/
 └── README.md
 ```
 
-<!-- markdownlint-disable MD033 -->
-<details>
-<summary><b>DDP Smoke Test</b></summary>
+## DDP Smoke Test
 
 Run inside Podman:
 
@@ -41,7 +39,7 @@ Validates:
 * Gloo
 * AllReduce
 
-```bash
+```text
 torchrun
     |
     +-- process rank 0
@@ -59,11 +57,9 @@ torchrun
 
 It proves:
 
-"Can multiple PyTorch processes communicate correctly?"
-</details>
+*"Can multiple PyTorch processes communicate correctly?"*
 
-<details>
-<summary><b>DataLoader / CPU Contention Lab</b></summary>
+## DataLoader / CPU Contention Lab
 
 Run with different worker counts:
 
@@ -104,10 +100,7 @@ too many workers
 → throughput may degrade
 ```
 
-</details>
-
-<details>
-<summary><b>Observe CPU Pressure</b></summary>
+## Observe CPU Pressure
 
 From another shell/container, inspect:
 
@@ -134,10 +127,7 @@ Consider:
 * compute inefficiency
 * infrastructure limits
 
-</details>
-
-<details>
-<summary><b>GPU Timing on M2</b></summary>
+## GPU Timing on M2
 
 Run locally on macOS:
 
@@ -159,10 +149,7 @@ CPU submission time
 GPU completion time
 ```
 
-</details>
-
-<details>
-<summary><b>DistributedSampler Demo</b></summary>
+## DistributedSampler Demo
 
 Run with four distributed worker processes:
 
@@ -176,10 +163,8 @@ podman run --rm -it \
 ```
 
 The demo creates a dataset containing 16 samples and uses `DistributedSampler` to give each worker a different subset. With four workers, each rank receives four samples.
-</details>
 
-<details>
-<summary><b>Environment</b></summary>
+## Environment
 
 ```text
 M2 MacBook
@@ -190,5 +175,3 @@ M2 MacBook
 ```
 
 Use the Linux Podman container for DDP experiments. Use MPS locally for GPU timing experiments.
-</details>
-<!-- markdownlint-enable MD033 -->

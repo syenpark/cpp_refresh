@@ -1,8 +1,8 @@
-# C++ Refresh: A Systems-Oriented ML Infrastructure Lab
+# A Systems-Oriented Engineer's Lab: C++, Python/PyTorch, Kubernetes
 
 [![C++ Pre-commit Checks](https://github.com/syenpark/cpp_refresh/actions/workflows/cpp-precommit.yml/badge.svg)](https://github.com/syenpark/cpp_refresh/actions/workflows/cpp-precommit.yml)
 
-A hands-on engineering lab exploring **C++, low-latency data processing, and distributed ML systems**.
+A hands-on lab across the layers of modern ML infrastructure — low-latency **C++** kernels, **Python/PyTorch** distributed training, and **Kubernetes** orchestration.
 
 Modern ML systems are increasingly limited not only by model inference, but also by everything around the model:
 
@@ -13,12 +13,35 @@ Modern ML systems are increasingly limited not only by model inference, but also
 - process communication
 - resource utilization
 
-This project focuses on understanding and optimizing these system-level bottlenecks by building components explicitly from the ground up.
+From C++ memory management and lock-free queues, to DDP process groups and pod scheduling, this repo builds components explicitly from the ground up. The goal is not to hide complexity behind frameworks, but to build intuition about what happens underneath them.
 
-The goal is not to hide complexity behind frameworks, but to build intuition about what happens underneath them.
+*Note: the repository retains its original name, `cpp_refresh`, but the content scope is much broader.*
 
-> [!IMPORTANT]
-The [./src/cpp](./src/cpp/) directory contains the C++ analytics bootstrap. It focuses on CMake, ZeroMQ, configuration, JSON decoding, and low-latency systems concepts. For more details, see the [./src/cpp/README.md](./src/cpp/README.md).
+## Repository Layout
+
+| Path | What it is | Guide |
+| --- | --- | --- |
+| [`src/cpp/`](./src/cpp/) | C++ analytics bootstrap (CMake, ZeroMQ, config, JSON decode) | [src/cpp/README.md](./src/cpp/README.md) |
+| [`training/`](./training/) | PyTorch distributed-training & GPU timing experiments | [training/README.md](./training/README.md) |
+| [`k8s/`](./k8s/) | Local Kubernetes (Job vs Deployment) lab on kind + Podman | [k8s/README.md](./k8s/README.md) |
+| [`linux/`](./linux/) | Base Linux Systems Lab container image | [Containerfile](./linux/Containerfile) |
+| [`docs/`](./docs/) | Systems notes and learning docs | [jargon](./docs/jargon.md) · [memory layout](./docs/memory-hierarchy.md) · [allocators & cache](./docs/allocators-cache.md) |
+
+### C++ source topics
+
+`src/cpp/` also contains a series of focused, self-contained topics:
+
+- [day01](./src/cpp/day01/) — stack vs heap, object lifetime
+- [day02](./src/cpp/day02/) — reference vs copy
+- [day03](./src/cpp/day03/) — elide vs move vs copy
+- [day04](./src/cpp/day04/) — STL containers & API design
+- [day05](./docs/allocators-cache.md) — allocators & cache behavior
+- [day06](./src/cpp/day06/) — NUMA (numa.cpp)
+- [day07](./src/cpp/day07/) — atomic vs mutex
+- [week02](./src/cpp/week02/) — memory ordering (SPSC)
+- [week03](./src/cpp/week03/) — lock-free queue (Treiber stack)
+- [week04](./src/cpp/week04/) — micro benchmark (vector vs string)
+- [lab](./src/cpp/lab/) — producer / consumer
 
 ## Download the Built Images
 
@@ -74,162 +97,9 @@ kubectl cluster-info --context kind-mle-lab
 
 For Kubernetes lab practice, see the [Kubernetes Lab](./k8s/README.md).
 
-## Contents
+## Practical Application: Video Analytics
 
-- [Download the Built Images](#download-the-built-images)
-- [Create the Linux Systems Lab Cluster](#create-the-linux-systems-lab-cluster-on-mac-m2)
-- [Battlefield](#battlefield-)
-- [Topics](#topics-)
-- [Allocators & Cache Behavior (Day 05)](#allocators--cache-behavior-day-05-)
-- [Practical Application: Video Analytics](#practical-application-video-analytics-)
-
-## Battlefield [↑](#contents)
-
-<details>
-<summary> Click to expand/collapse </summary>
-
-```shell
-                    ┌──────────────────────────────┐
-                    │            CPU               │
-                    │                              │
-                    │  ┌──────── Core 0 ────────┐  │ Core: Executes instructions
-                    │  │ Registers (R0..Rn)     │  │    Register: Fastest storage
-                    │  │ L1 Cache (32KB)        │  │              Instructions operate
-                    │  └────────────────────────┘  │    L1 Cache: Hot variables should live here
-                    │                              │
-                    │  ┌──────── Core 1 ────────┐  │
-                    │  │ Registers (R0..Rn)     │  │
-                    │  │ L1 Cache (32KB)        │  │
-                    │  └────────────────────────┘  │
-                    │                              │
-                    │        Shared L2 Cache       │ L2 Cache: Bigger and slower than L1
-                    │          (per-core / small)  │
-                    │                              │
-                    │  ┌────────────────────────┐  │
-                    │  │        L3 Cache        │  │ L3 Cache: Shared across cores
-                    │  │   (Shared, MBs)        │  │           Bigger and slower than L2
-                    │  └────────────────────────┘  │
-                    └──────────────┬───────────────┘
-                                   │
-                        Local Memory Controller
-                                   │
-                ┌──────────────────┴────────────────────────────────────────────────┐
-                │                                                                   │
-        RAM (NUMA Node 0)                                                   RAM (NUMA Node 1)
-        ~80ns latency                                                        ~150ns latency
-    +---------------------------------------------------------------+
-    |                   MAIN SYSTEM MEMORY (RAM)                    |
-    |         (Shared Address Space for all Cores/Threads)          |
-    |                                                               |
-    |  +---------------------------------------------------------+  |
-    |  | [ STACK ] (Thread 1) | [ STACK ] (Thread 2)             |  |
-    |  | (Local variables, function return addresses)            |  |
-    |  +---------------------------------------------------------+  |
-    |  | [ HEAP ]                                                |  |
-    |  | (Dynamically allocated: new / std::shared_ptr)          |  |
-    |  +---------------------------------------------------------+  |
-    |  | [ DATA SEGMENT ]                                        |  |
-    |  | (Globals, static variables, constexpr mutexes)          |  |
-    |  +---------------------------------------------------------+  |
-    |  | [ CODE SEGMENT ]                                        |  |
-    |  | (Your compiled binary / machine instructions)           |  |
-    |  +---------------------------------------------------------+  |
-    +---------------------------------------------------------------+
-```
-
-How latency can grow...
-
-```shell
-Instruction →
-    uses Registers →
-        if miss → L1 →
-            miss → L2 →
-                miss → L3 →
-                    miss → RAM (NUMA local?) →
-                        miss → RAM (NUMA remote)
-```
-
-</details>
-
-## Topics [↑](#contents)
-
-- [day01](./src/cpp/day01/): stack vs heap
-- [day02](./src/cpp/day02/): reference vs copy
-- [day03](./src/cpp/day03/): elide vs move vs copy
-- [day04](./src/cpp/day04/): STL Containers & API Design
-- [day07](./src/cpp/day07/): atomic vs mutex
-- [week02](./src/cpp/week02/): memory ordering
-- [week03](./src/cpp/week03/): lock-free queue
-- [week04](./src/cpp/week04/): micro benchmark
-
-## Allocators & Cache Behavior (Day 05) [↑](#contents)
-
-<details>
-<summary> Click to expand/collapse </summary>
-
-### What an allocator actually is
-
-An `allocator` answers two questions:
-
-1. Where do I get memory?
-2. How fast and predictable is it?
-
-Default allocators (malloc, new) are:
-    - thread-safe (locks)
-    - general-purpose
-    - optimized for average throughput, not tail latency
-
-Problems:
-    - lock contention
-    - heap fragmentation
-    - unpredictable pauses
-    - cache-unfriendly reuse
-
-### The memory hierarchy
-
-```bash
-Registers
-L1 cache   (~1 ns)
-L2 cache   (~4 ns)
-L3 cache   (~10–15 ns)
-RAM        (~100 ns)
-```
-
-One RAM access = hundreds of CPU instructions, so a cache miss hurts more than a copy.
-
-### Cache lines
-
-- Cache lines ~= 64 bytes
-- CPU loads entire cache line, not a single variable
-
-If your struct is poorly laid out:
-    - You pull in useless data
-    - You evict useful data
-    - Latency explodes
-
-```cpp
-struct Bad {
-    bool flag;
-    double price;
-    bool active;
-}
-```
-
-```cpp
-struct Good {
-    double price;
-    bool flag;
-    bool active;
-}
-```
-
-Group hot data together.
-
-</details>
-
-## Practical Application: Video Analytics [↑](#contents)
-
-This repository also includes PyTorch distributed-training and M2 GPU timing experiments in [`training/`](./training/). See the [training guide](./training/README.md) for details.
+PyTorch distributed-training and M2 GPU timing experiments live in [`training/`](./training/). See the [training guide](./training/README.md) for details.
 
 As model inference becomes faster and more efficient, the true bottleneck often shifts to data flow and real-time decision-making within the Python-based container. Python's inherent inefficiencies in the post-processing layer, especially on hot paths, can significantly hinder performance.
 
@@ -259,16 +129,18 @@ The training image is built by the [`Build PyTorch DDP Container`](./.github/wor
 ### Hot loop
 
 Why the C++ Rewrite?
+
 The Python implementation suffers from significant overhead in the "hot loop" due to:
 
 1. Pointer Chasing: Python's memory model requires multiple heap lookups (List → Object → Dict → Value), leading to frequent cache misses.
-2. Dynamic Lookups: Every attribute access (obj.bbox) triggers a hash table lookup in the instance dictionary.
+2. Dynamic Lookups: Every attribute access (`obj.bbox`) triggers a hash table lookup in the instance dictionary.
 3. Memory Fragmentation: Python objects are scattered across the heap, preventing the CPU hardware prefetcher from optimizing data throughput.
 
 The C++ Advantage:
-By using a contiguous std::vector of POD (Plain Old Data) structs, we achieve linear memory access. This allows the CPU to leverage its L1/L2 caches effectively, eliminates dictionary lookups through fixed memory offsets, and removes the interpreter overhead, resulting in a 10x-100x speedup for metadata-heavy analytics.
 
-```bash
+By using a contiguous `std::vector` of POD (Plain Old Data) structs, we achieve linear memory access. This allows the CPU to leverage its L1/L2 caches effectively, eliminates dictionary lookups through fixed memory offsets, and removes the interpreter overhead, resulting in a 10x–100x speedup for metadata-heavy analytics.
+
+```text
 PYTHON (hot loop)              C++ (hot loop)
 ──────────────────────────     ──────────────────────────
 list -> pointer                vector -> data
@@ -281,7 +153,7 @@ interpreter dispatch           compiled loop
 heap objects everywhere        one contiguous buffer
 ```
 
-```bash
+```text
 # Python
        CPU (The "Hot Loop" Runner)
         │
@@ -315,7 +187,7 @@ heap objects everywhere        one contiguous buffer
                     └──────────────┘
 ```
 
-```bash
+```text
 # C++
        CPU
         │
@@ -330,5 +202,12 @@ heap objects everywhere        one contiguous buffer
 │ │ [cx/cy] ││ [cx/cy] ││ [cx/cy] │         │    NO scattered heap.
 │ └─────────┘└─────────┘└─────────┘         │
 └───────────────────────────────────────────┘
-
 ```
+
+## Learning Notes
+
+In-depth write-ups moved out of this README to keep it a navigation hub:
+
+- [docs/memory-hierarchy.md](./docs/memory-hierarchy.md) — the cache "battlefield" diagram and latency chain
+- [docs/allocators-cache.md](./docs/allocators-cache.md) — Day 05 allocator & cache lecture
+- [docs/jargon.md](./docs/jargon.md) — real-time eng jargon (hot path, false sharing, NUMA, allocator…)

@@ -41,13 +41,15 @@ cpp_refresh/
 │   ├── tomlplusplus/           # git submodule (header-only)
 │   ├── cppzmq/                 # git submodule (header-only)
 │   └── rapidjson/              # git submodule (header-only)
-├── src/
-│   └── cpp/
-│       ├── common/
-│       │   ├── config.h
-│       │   └── config.cpp
-│       └── analytics/
-│           └── main.cpp
+├── src/cpp/
+│   ├── common/                 # config parsing
+│   │   ├── config.h
+│   │   └── config.cpp
+│   ├── analytics/
+│   │   └── main.cpp
+│   ├── lab/
+│   │   └── producer_consumer.cpp
+│   └── include/rapidjson.hpp   # convenience wrapper
 ├── .pre-commit-config.yaml
 └── README.md
 ```
@@ -117,14 +119,23 @@ git submodule update --init --recursive
 Example:
 
 ```toml
-[analytics]
-max_sources = 4
-max_detections = 32
+[stream]
+fps = 0
+source_id = 0
+uri = "rtsp://camera/stream"
+fps_check_interval_sec = 10
+max_sources = 1
+max_detections = 300
+
+[simulation]
+new_object_probability = 0.1
+object_exit_probability = 0.05
 
 [zmq]
 endpoint = "tcp://127.0.0.1:5555"
 socket_type = "sub"
 subscribe = "inference"
+port = 5555
 rcvhwm = 1000
 ```
 

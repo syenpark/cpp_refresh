@@ -135,7 +135,7 @@ Run locally on macOS:
 python training/gpu_inference_timing.py
 ```
 
-Compare naive timing with:
+Compare naive timing with synchronized timing:
 
 ```python
 torch.mps.synchronize()
@@ -147,6 +147,64 @@ Key lesson:
 CPU submission time
 ≠
 GPU completion time
+```
+
+A GPU operation may be asynchronous relative to the CPU:
+
+```text
+model(x)
+→ returns a Tensor representing the result
+→ GPU may still be producing that result asynchronously
+
+y = model(x_gpu)
+│
+├── returns Tensor quickly
+│
+│        GPU still computing y...
+│
+y.cpu()
+│
+├── CPU needs result
+│        ↓
+│      WAIT
+│        ↓
+│      GPU finishes
+│        ↓
+└── correct data transferred/available
+```
+
+If GPU execution itself is only a few milliseconds but there are long idle gaps between batches, investigate the upstream pipeline first:
+
+```text
+DataLoader / CPU preprocessing
+        ↓
+Queue starvation
+        ↓
+H2D transfer
+        ↓
+GPU compute
+
+                    GPU idle
+                       ↑
+                Why no work?
+                 /          \
+        batch not ready     transfer slow
+             ↑                   ↑
+       queue empty            H2D expensive
+             ↑
+       DataLoader slow
+
+DataLoader creates the batch. Queue buffers the batch. H2D moves the batch onto the GPU.
+```
+
+Do not optimize TensorRT kernels before proving that GPU compute is the bottleneck.
+
+On Apple Silicon, the device-transfer boundary is still useful conceptually, but the physical memory model differs from a discrete CUDA GPU connected over PCIe.
+
+```python
+batch_cpu = next(loader)     # DataLoader
+batch_gpu = batch_cpu.to("cuda")  # H2D
+output = model(batch_gpu)    # GPU compute
 ```
 
 ## DistributedSampler Demo

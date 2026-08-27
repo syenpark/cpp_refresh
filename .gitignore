@@ -83,3 +83,19 @@ htmlcov/
 db.sqlite3
 .ipynb_checkpoints/
 .DS_Store
+
+### --- 8. In-place C++ topic build outputs --- ###
+# Executables produced by compiling a topic in place, next to its .cpp source.
+# Keep the source; don't commit the compiled artifact.
+*_asan
+src/cpp/day01/lifetime
+src/cpp/day02/reference_vs_copy
+src/cpp/day03/move
+src/cpp/day04/api
+src/cpp/day07/automic
+src/cpp/day07/mutex
+src/cpp/lab/producer_consumer
+src/cpp/week03/treiber
+src/cpp/week03/treiber_hazard
+src/cpp/week03/treiber_tagged
+src/cpp/week04/vector_vs_string

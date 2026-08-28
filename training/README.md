@@ -15,7 +15,7 @@ training/
 
 ## DDP Smoke Test
 
-Run inside Podman:
+Run inside Podman [./train.py](./train.py):
 
 ```bash
 podman run --rm -it \
@@ -176,12 +176,16 @@ y.cpu()
 If GPU execution itself is only a few milliseconds but there are long idle gaps between batches, investigate the upstream pipeline first:
 
 ```text
-DataLoader / CPU preprocessing
-        ↓
-Queue starvation
-        ↓
-H2D transfer
-        ↓
+DataLoader workers / CPU preprocessing
+      ↓
+prefetch queue
+      ↓
+next(loader)
+      ↓
+CPU batch
+      ↓
+.to(device)        ← H2D/device-transfer boundary
+      ↓
 GPU compute
 
                     GPU idle

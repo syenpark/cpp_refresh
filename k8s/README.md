@@ -71,6 +71,38 @@ Job / Deployment creates a Pod
  to node           FailedScheduling
 ```
 
+#### Pod vs Node: what to inspect
+
+For scheduling problems, separate the **Pod side** from the **Node side**.
+
+```text
+POD                              NODE
+
+Demand                           Supply
+- CPU request                    - CPU allocatable
+- memory request                 - memory allocatable
+- GPU request                    - GPU allocatable
+
+Permission                       Restriction
+- tolerations                    - taints
+```
+
+Useful commands:
+
+```bash
+# Why was the Pod not scheduled?
+kubectl describe pod <pod>
+
+# What does the Pod request / tolerate?
+kubectl get pod <pod> -o yaml
+
+# What can the Node provide / what restrictions does it have?
+kubectl describe node <node>
+
+# Raw Node object if exact fields are needed
+kubectl get node <node> -o yaml
+```
+
 #### `taint` and `toleration`
 
 ```text
@@ -88,6 +120,13 @@ workload=reserved:NoSchedule      workload=reserved:NoSchedule
 
 Node has `taint`:
 "Pods are blocked unless allowed"; Pods should not be scheduled onto me unless they are allowed to tolerate this restriction.
+
+```bash
+# Define the tain on the node
+kubectl taint node <node> workload=reserved:NoSchedule
+# Inspect
+kubectl describe node <node>
+```
 
 Pod has `toleration`:
 "I am allowed through this specific block"

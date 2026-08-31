@@ -2,9 +2,18 @@ FROM python:3.14-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+    build-essential \
+    vim \
+    htop \
+    sysstat \
     procps \
+    strace \
+    lsof \
     iproute2 \
+    psmisc \
     iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 

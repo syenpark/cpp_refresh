@@ -2,6 +2,16 @@
 
 Local Kubernetes lab using **kind + Podman** on an M2 MacBook.
 
+## Contents
+
+- [Start the Cluster](#start-the-cluster)
+- [Useful `kubectl` Concepts](#useful-kubectl-concepts)
+- [Job Lab](#job-lab)
+- [Deployment Lab](#deployment-lab)
+- [Job vs Deployment](#job-vs-deployment)
+- [CrashLoopBackOff](#crashloopbackoff)
+- [Resource requests](#resource-requests)
+
 ## Start the Cluster
 
 ```bash
@@ -32,6 +42,9 @@ Controller → Pod → Container → Process
 * **Process**: actual application execution.
 
 `--context` selects which Kubernetes cluster/context to use. Once `kind-mle-lab` is the current context, it can be omitted.
+
+<details>
+<summary>Scheduler — taints, tolerations &amp; failure reasons</summary>
 
 ### Scheduler
 
@@ -151,6 +164,8 @@ Insufficient nvidia.com/gpu = resource-fit failure
 untolerated taint = scheduling-policy failure
 
 Neither means the training application started and then failed.
+
+</details>
 
 ---
 

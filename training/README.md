@@ -2,6 +2,18 @@
 
 PyTorch distributed-training and GPU timing experiments.
 
+## Contents
+
+- [DDP Smoke Test](#ddp-smoke-test)
+- [DataLoader / CPU Contention Lab](#dataloader--cpu-contention-lab)
+- [One Training Iteration: CPU → GPU → DDP](#one-training-iteration-cpu--gpu--ddp)
+- [GPU Synchronization vs Distributed Synchronization](#gpu-synchronization-vs-distributed-synchronization)
+- [Training Performance Troubleshooting Map](#training-performance-troubleshooting-map)
+- [Observe CPU Pressure](#observe-cpu-pressure)
+- [GPU Timing on M2](#gpu-timing-on-m2)
+- [DistributedSampler Demo](#distributedsampler-demo)
+- [Environment](#environment)
+
 ## Files
 
 ```text
@@ -39,6 +51,9 @@ Validates:
 * Gloo
 * AllReduce
 
+<details>
+<summary>torchrun / process-group diagram</summary>
+
 ```text
 torchrun
     |
@@ -54,6 +69,7 @@ torchrun
              ↓
        AllReduce
 ```
+</details>
 
 It proves:
 
@@ -103,6 +119,9 @@ too many workers
 ### DDP Ranks vs DataLoader Workers
 
 `--nproc-per-node` and `DataLoader(num_workers=...)` control different processes.
+
+<details>
+<summary>Full breakdown</summary>
 
 ```text
 torchrun --nproc-per-node=2
@@ -173,6 +192,8 @@ Increasing both blindly can oversubscribe the available CPUs.
 
 For scaling experiments, keep `num_workers=0` initially so that changing the
 number of DDP ranks is the main experimental variable.
+
+</details>
 
 ---
 
@@ -486,6 +507,9 @@ GPU completion time
 
 A GPU operation may be asynchronous relative to the CPU:
 
+<details>
+<summary>Why `y.cpu()` may WAIT</summary>
+
 ```text
 model(x)
 → returns a Tensor representing the result
@@ -507,8 +531,12 @@ y.cpu()
 │        ↓
 └── correct data transferred/available
 ```
+</details>
 
 If GPU execution itself is only a few milliseconds but there are long idle gaps between batches, investigate the upstream pipeline first:
+
+<details>
+<summary>Where the pipeline stalls</summary>
 
 ```text
 DataLoader workers / CPU preprocessing
@@ -535,7 +563,9 @@ GPU compute
 
 DataLoader creates the batch. Queue buffers the batch. H2D moves the batch onto the GPU.
 ```
+</details>
 
+Do not optimize TensorRT kernels before proving that GPU compute is the bottleneck.
 Do not optimize TensorRT kernels before proving that GPU compute is the bottleneck.
 
 On Apple Silicon, the device-transfer boundary is still useful conceptually, but the physical memory model differs from a discrete CUDA GPU connected over PCIe.

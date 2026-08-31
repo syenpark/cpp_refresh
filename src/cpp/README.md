@@ -13,6 +13,23 @@ before introducing any analytics hot paths.
 
 ---
 
+## Contents
+
+- [Current Scope](#current-scope)
+- [Project Structure](#project-structure)
+- [Dependencies](#dependencies)
+- [Installing Dependencies](#installing-dependencies)
+- [config.toml](#configtoml)
+- [Build](#build)
+- [Run](#run)
+- [Current Behavior](#current-behavior)
+- [Measurement Notes (Python vs C++)](#measurement-notes-python-vs-c)
+- [Tooling](#tooling)
+- [Design Notes](#design-notes)
+- [Next Steps](#next-steps)
+
+---
+
 ## Current Scope
 
 As of now, this repository provides:

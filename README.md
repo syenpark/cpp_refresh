@@ -17,6 +17,14 @@ From C++ memory management and lock-free queues, to DDP process groups and pod s
 
 *Note: the repository retains its original name, `cpp_refresh`, but the content scope is much broader.*
 
+## Contents
+
+- [Repository Layout](#repository-layout)
+- [Download the Built Images](#download-the-built-images)
+- [Create the Linux Systems Lab Cluster on Mac M2](#create-the-linux-systems-lab-cluster-on-mac-m2)
+- [Practical Application: Video Analytics](#practical-application-video-analytics)
+- [Learning Notes](#learning-notes)
+
 ## Repository Layout
 
 | Path | What it is | Guide |

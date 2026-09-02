@@ -9,6 +9,7 @@ Local Kubernetes lab using **kind + Podman** on an M2 MacBook.
 - [Job Lab](#job-lab)
 - [Deployment Lab](#deployment-lab)
 - [Job vs Deployment](#job-vs-deployment)
+- [Service Discovery and DNS Lab](#service-discovery-and-dns-lab)
 - [CrashLoopBackOff](#crashloopbackoff)
 - [Resource requests](#resource-requests)
 
@@ -325,6 +326,85 @@ finite process exits 0
 Use a **Job** for finite workloads such as training/batch processing.
 
 Use a **Deployment** for continuously running workloads such as inference services.
+
+---
+
+## Service Discovery and DNS Lab
+
+For ML systems, inference Pods are disposable workers: their Pod IPs can change after a restart or rollout. A **Service** gives clients a stable endpoint, while a **Deployment** keeps the desired inference Pods running.
+
+```text
+client Pod
+    ↓ http://inference-service:80
+Service (stable ClusterIP)
+    ↓
+EndpointSlice (current Ready Pod IPs)
+    |-- inference Pod A
+    `-- inference Pod B
+```
+
+<details>
+<summary>Hands-on: create, test, and debug Service discovery</summary>
+
+Create two backend Pods and expose them through a Service:
+
+```bash
+kubectl create deployment inference \
+  --image=nginx:alpine \
+  --replicas=2
+
+kubectl expose deployment inference \
+  --name=inference-service \
+  --port=80 \
+  --target-port=80
+
+kubectl get service inference-service
+kubectl get endpointslice -l kubernetes.io/service-name=inference-service
+```
+
+`kubectl expose` creates a Service; it does not expose Pod IPs directly or create Pods. Kubernetes matches the Service selector to ready Pod labels, then records the matching Pod IPs in EndpointSlices.
+
+Test discovery from a temporary client:
+
+```bash
+kubectl run client \
+  --image=busybox:1.36 \
+  --restart=Never \
+  --command -- sleep 3600
+
+kubectl exec client -- nslookup inference-service
+kubectl exec client -- wget -qO- http://inference-service
+```
+
+`nslookup inference-service` resolves to the Service's stable `ClusterIP`, **not** a backend Pod IP. Service routing then selects a current EndpointSlice address.
+
+Delete one backend Pod and compare the Pod IPs with the endpoints:
+
+```bash
+kubectl get pods -o wide
+kubectl delete pod <inference-pod>
+kubectl get pods -w
+kubectl get endpointslice -l kubernetes.io/service-name=inference-service
+kubectl exec client -- wget -qO- http://inference-service
+```
+
+The Deployment replaces the deleted Pod, potentially with a new IP. The EndpointSlice updates, but the client continues using `http://inference-service` unchanged.
+
+When a Service exists but has no endpoints, trace the request path:
+
+```text
+Client -> DNS -> Service -> selector -> EndpointSlice -> backend Pods
+```
+
+The most likely cause is that the Service selector does not match ready Pod labels. Inspect the selector, Pod labels, readiness, and EndpointSlices:
+
+```bash
+kubectl get service inference-service -o yaml
+kubectl get pods --show-labels
+kubectl get endpointslice -l kubernetes.io/service-name=inference-service
+```
+
+</details>
 
 ---
 

@@ -1,4 +1,4 @@
-"""DDP DataLoader benchmark for synchronization experiments."""
+"""DDP straggler benchmark for synchronization experiments."""
 
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ from torch.utils.data import Dataset
 from py.utils.custom_logging import SetLogger
 
 logger = SetLogger().logger
+
+RANK = 2
 
 
 class SyntheticDataset(Dataset):
@@ -50,7 +52,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-size", type=int, default=10_000)
     parser.add_argument("--work", type=int, default=100)
     parser.add_argument("--epochs", type=int, default=2)
-    parser.add_argument("--before-backward", type=int, default=0)
+    parser.add_argument("--before-backward", type=int, default=2)
+
     return parser.parse_args()
 
 
@@ -95,14 +98,27 @@ def main() -> None:
 
     total_samples = 0
 
-    for _ in range(args.epochs):
-        for x, y in loader:
+    for epoch_idx in range(args.epochs):
+        for batch_idx, (x, y) in enumerate(loader):
             optimizer.zero_grad()
 
             prediction = model(x)
             loss = loss_fn(prediction, y)
 
+            # Inject exactly one artifical starggler.
+            if rank == RANK and epoch_idx == 0 and batch_idx == 0:
+                time.sleep(0.5)
+
+            t0 = time.perf_counter()
             loss.backward()
+            backward_time = time.perf_counter() - t0
+
+            if epoch_idx == 0 and batch_idx == 0:
+                logger.info(
+                    "rank=%s backward_time=%.4fs",
+                    rank,
+                    backward_time,
+                )
             optimizer.step()
 
             total_samples += x.size(0)
@@ -111,18 +127,18 @@ def main() -> None:
 
     elapsed = time.perf_counter() - start
 
-    local_throughput = total_samples / elapsed
+    total_samples_tensor = torch.tensor(float(total_samples))
 
-    throughput = torch.tensor(local_throughput)
     dist.reduce(
-        throughput,
+        total_samples_tensor,
         dst=0,
         op=dist.ReduceOp.SUM,
     )
 
     if rank == 0:
+        global_throughput = total_samples_tensor.item() / elapsed
         logger.info("elapsed=%.2fs", elapsed)
-        logger.info("throughput=%.2f samples/s", throughput.item())
+        logger.info("throughput=%.2f samples/s", global_throughput)
 
     dist.destroy_process_group()
 

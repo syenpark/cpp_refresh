@@ -32,7 +32,7 @@ From C++ memory management and lock-free queues, to DDP process groups and pod s
 | [`src/cpp/`](./src/cpp/) | C++ analytics bootstrap (CMake, ZeroMQ, config, JSON decode) | [src/cpp/README.md](./src/cpp/README.md) |
 | [`training/`](./training/) | PyTorch distributed-training & GPU timing experiments | [training/README.md](./training/README.md) |
 | [`k8s/`](./k8s/) | Local Kubernetes (Job vs Deployment) lab on kind + Podman | [k8s/README.md](./k8s/README.md) |
-| [`linux/`](./linux/) | Base Linux Systems Lab container image | [Containerfile](./linux/Containerfile) |
+| [`linux/`](./linux/) | Linux performance and troubleshooting notes plus an Ubuntu 22.04 systems-tools image | [linux README](./linux/README.md) · [Containerfile](./linux/Containerfile) |
 | [`docs/`](./docs/) | Systems notes and learning docs | [jargon](./docs/jargon.md) · [memory layout](./docs/memory-hierarchy.md) · [allocators & cache](./docs/allocators-cache.md) |
 
 ### C++ source topics
@@ -53,7 +53,7 @@ From C++ memory management and lock-free queues, to DDP process groups and pod s
 
 ## Download the Built Images
 
-The [`Build Linux Systems Lab`](./.github/workflows/build-cpp-env.yml) workflow builds the image and publishes it to the GitHub Container Registry when [`linux/Containerfile`](./linux/Containerfile) changes are pushed to `main`.
+The [`Build Linux Systems Lab`](./.github/workflows/build-cpp-env.yml) workflow builds the Ubuntu 22.04 Linux systems image and publishes it to the GitHub Container Registry when [`linux/Containerfile`](./linux/Containerfile) changes are pushed to `main`. The image includes build tools and utilities for systems work and troubleshooting, including CMake, Git, `htop`, `sysstat`, `strace`, `lsof`, and `iproute2`.
 
 The [`Build PyTorch DDP Container`](./.github/workflows/build-training-env.yml) workflow builds the training image and publishes it when the `training/` files change.
 

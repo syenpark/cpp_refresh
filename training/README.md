@@ -566,7 +566,6 @@ DataLoader creates the batch. Queue buffers the batch. H2D moves the batch onto 
 </details>
 
 Do not optimize TensorRT kernels before proving that GPU compute is the bottleneck.
-Do not optimize TensorRT kernels before proving that GPU compute is the bottleneck.
 
 On Apple Silicon, the device-transfer boundary is still useful conceptually, but the physical memory model differs from a discrete CUDA GPU connected over PCIe.
 

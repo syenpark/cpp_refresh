@@ -32,7 +32,7 @@ From C++ memory management and lock-free queues, to DDP process groups and pod s
 | [`src/cpp/`](./src/cpp/) | C++ analytics bootstrap (CMake, ZeroMQ, config, JSON decode) | [src/cpp/README.md](./src/cpp/README.md) |
 | [`training/`](./training/) | PyTorch distributed-training & GPU timing experiments | [training/README.md](./training/README.md) |
 | [`k8s/`](./k8s/) | Local Kubernetes (Job vs Deployment) lab on kind + Podman | [k8s/README.md](./k8s/README.md) |
-| [`linux/`](./linux/) | Linux performance and troubleshooting notes plus an Ubuntu 22.04 systems-tools image | [linux README](./linux/README.md) · [Containerfile](./linux/Containerfile) |
+| [`linux/`](./linux/) | Linux performance and troubleshooting notes plus an Ubuntu 22.04 systems-tools image | [linux/README.md](./linux/README.md) |
 | [`docs/`](./docs/) | Systems notes and learning docs | [jargon](./docs/jargon.md) · [memory layout](./docs/memory-hierarchy.md) · [allocators & cache](./docs/allocators-cache.md) |
 
 ### C++ source topics

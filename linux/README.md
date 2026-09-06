@@ -11,6 +11,7 @@ The emphasis is on troubleshooting mental models, not memorising commands.
 - [Blocking, spinning, and sleeping](#blocking-spinning-and-sleeping)
 - [CPU pressure](#cpu-pressure)
 - [I/O diagnosis](#io-diagnosis)
+- [Network diagnosis](#network-diagnosis)
 - [Process and thread tools](#process-and-thread-tools)
 - [Troubleshooting workflow](#troubleshooting-workflow)
 - [Commands worth remembering](#commands-worth-remembering)
@@ -56,9 +57,9 @@ one signal of CPU contention.
 
 ### Blocked / uninterruptible sleep
 
-A task is waiting for an event or resource, commonly disk I/O. It does not
-continuously consume a CPU core while waiting, but the application cannot make
-progress until the event completes.
+A task is waiting in uninterruptible sleep, commonly because the kernel is
+waiting for I/O or another low-level operation to complete. It does not
+continuously consume CPU while waiting.
 
 ### Sleeping
 
@@ -102,7 +103,7 @@ becomes eligible to run again when the sleep expires or it is notified.
 | Running | Yes | Executing instructions |
 | Runnable | No, waiting for CPU | Scheduling pressure |
 | Spinning | Yes | Repeated polling |
-| Blocked | No | I/O, resource, or event wait |
+| Blocked | No | I/O or kernel-level wait |
 | Sleeping | No | Time or event wait |
 | Context switch | N/A | CPU changes task |
 
@@ -156,7 +157,7 @@ vmstat 1
 
 | Field | Meaning |
 | --- | --- |
-| `r` | Runnable tasks |
+| `r` | Running/runnable tasks |
 | `b` | Tasks in uninterruptible sleep |
 | `us` | User CPU |
 | `sy` | System/kernel CPU |
@@ -177,7 +178,7 @@ b high + wa high
 → investigate blocked I/O
 
 cs very high
-→ investigate scheduling or thread contention
+→ investigate further; high context-switch rate alone is not a root cause
 ```
 
 `vmstat` provides system-level evidence. It does not identify the responsible
@@ -191,23 +192,42 @@ Use `iostat` when the evidence points toward storage:
 iostat -xz 1
 ```
 
+- `-x` = extended device statistics
+- `-z` = omit devices with no activity in the interval
+
 | Field | Meaning |
 | --- | --- |
 | `r/s` | Reads per second |
 | `w/s` | Writes per second |
 | `r_await` | Average read completion latency |
 | `w_await` | Average write completion latency |
-| `aqu-sz` | Average queue depth |
-| `%util` | Device utilisation |
+| `aqu-sz` | Average outstanding device I/O requests |
+| `%util` | Time the device was busy |
 
-High `await`, queue depth, and device utilisation together strengthen the I/O
-bottleneck hypothesis. A high `wa` value alone is a reason to investigate, not
-proof of root cause.
+`aqu-sz` is a **device I/O queue**, not a CPU scheduler queue. It can contain
+both reads and writes.
+
+`vmstat b` and `iostat aqu-sz` do not need to match:
+
+```text
+b
+→ number of blocked Linux tasks
+
+aqu-sz
+→ number of outstanding requests for this block device
+```
+
+The relationship is not 1:1. One task can issue multiple asynchronous I/O
+requests, and multiple tasks can also wait on shared work or other resources.
+
+High `await`, queue depth, and device utilisation together strengthen the
+storage bottleneck hypothesis. A high `wa` value alone is a reason to
+investigate, not proof of root cause.
 
 The first device table can represent activity accumulated over a longer period,
-while later tables represent the requested interval. If a virtual device such
-as `vda` is absent from a later table, it usually means there was no qualifying
-activity in that interval; the device did not disappear.
+while later tables represent the requested interval. If a device is absent
+from a later table when `-z` is used, it usually means there was no qualifying
+activity during that interval.
 
 ### Synthetic I/O results
 
@@ -220,6 +240,168 @@ dd if=/dev/zero of=/tmp/io-test.bin bs=4M count=512 conv=fdatasync
 measures one synthetic sequential workload in one environment. It does not
 predict random I/O, fsync-heavy workloads, network storage, database access, or
 production throughput.
+
+## Network diagnosis
+
+For Linux troubleshooting, this simplified network stack is enough:
+
+```text
+Application
+docker / curl / Kafka / PyTorch
+        |
+        v
+TCP or UDP          how application data is transported
+        |
+        v
+IP                  where packets are going
+        |
+        v
+Network interface   where packets enter/leave this host
+eth0 / lo / veth
+        |
+        v
+Network path / remote host
+```
+
+### Network interface
+
+A network interface is the Linux kernel's network endpoint for sending and
+receiving packets.
+
+Common examples:
+
+- `eth0` — physical or VM-facing network interface
+- `lo` — loopback / localhost
+- `veth*` — virtual interface, commonly used by containers
+- `cni-podman0` — Podman network bridge
+
+Inspect interfaces and their IP addresses:
+
+```bash
+ip addr
+```
+
+Inspect routing:
+
+```bash
+ip route
+```
+
+### IP vs TCP vs UDP
+
+**IP**
+- provides addressing and routing
+- answers: **where should the packet go?**
+
+**TCP**
+- connection-oriented transport over IP
+- provides ordered, reliable delivery using ACKs and retransmission
+- answers: **how is this reliable connection behaving?**
+
+**UDP**
+- datagram transport over IP
+- no built-in delivery, ordering, or retransmission guarantee
+- useful for workloads where timeliness and low overhead matter
+
+TCP and UDP both operate over IP:
+
+```text
+TCP ─┐
+     ├── over IP
+UDP ─┘
+```
+
+### `sar` — interface level
+
+```bash
+sar -n DEV 1
+```
+
+Useful fields:
+
+| Field | Meaning |
+| --- | --- |
+| `rxkB/s` | Data received by the interface |
+| `txkB/s` | Data transmitted by the interface |
+| `%ifutil` | Interface utilisation relative to reported link capacity |
+
+Question answered:
+
+> Is the network interface carrying traffic or close to saturation?
+
+Example:
+
+```text
+eth0 rx ≈ 2.5 MB/s
+eth0 tx ≈ 40 KB/s
+%ifutil ≈ 0.1%
+```
+
+Interpretation:
+
+- inbound network traffic exists
+- the interface itself is far from saturated
+- this does **not** prove the end-to-end network path is healthy
+
+### `ss` — TCP connection level
+
+```bash
+ss -ti
+```
+
+Use `ss` to inspect TCP connections and TCP-level behaviour such as:
+
+- connection state
+- RTT
+- retransmission information
+- congestion/window behaviour
+
+Question answered:
+
+> Is this TCP connection itself showing signs of delay or loss?
+
+### Example: slow `docker pull`
+
+```text
+docker pull slow
+        |
+        v
+vmstat
+r low, id high
+→ CPU contention unlikely
+        |
+        v
+iostat
+await low, aqu-sz low, %util low
+→ local storage saturation unlikely
+        |
+        v
+sar -n DEV
+RX traffic exists, %ifutil low
+→ downloading, but NIC is not saturated
+        |
+        v
+ss -ti
+→ inspect the TCP connection
+```
+
+Low `%ifutil` does not mean "the network is healthy." A download can still be
+slow because of:
+
+- high RTT
+- packet loss / retransmissions
+- congestion elsewhere on the path
+- remote server or registry throttling
+
+Mental model:
+
+```text
+sar = interface-level traffic and capacity
+ss  = TCP connection-level behaviour
+IP  = addressing and routing
+TCP/UDP = transport behaviour
+interface = packet entry/exit point on this host
+```
 
 ## Process and thread tools
 
@@ -243,7 +425,8 @@ Snapshot and process inventory:
 ps -eo pid,ppid,stat,comm,%cpu --sort=-%cpu
 ```
 
-Use it for process hierarchy, task state, and current CPU usage.
+Use it for process hierarchy, task state, command identity, and a snapshot of
+CPU usage.
 
 ### `pidstat`
 
@@ -251,12 +434,20 @@ Per-process and per-thread measurements over an interval:
 
 ```bash
 pidstat -u 1
-pidstat -t -p <PID> 1
-pidstat -w -p <PID> 1
+pidstat -u -t -p <PID> 1
+pidstat -w -t -p <PID> 1
 ```
 
 `%CPU` is CPU time consumed during the interval. `CPU` is the logical CPU on
 which the task was sampled or accounted. A task can move between logical CPUs.
+
+For context switching:
+
+- `cswch/s` = voluntary context switches per second
+- `nvcswch/s` = involuntary context switches per second
+
+High values alone do not prove a problem. Interpret them with runnable pressure,
+CPU utilisation, latency, and workload behaviour.
 
 ## Troubleshooting workflow
 
@@ -266,35 +457,61 @@ Use this instead of blindly running commands:
 Application is slow
         |
         v
-Is CPU saturated?
+vmstat
         |
-   +----+----+
-   |         |
-  YES        NO
-   |         |
-vmstat       v
-r/id     Is there I/O evidence?
-             |
-          +--+--+
-          |     |
-         YES    NO
-          |     |
-       iostat   investigate network,
-                memory, sync, or GPU
+        +-- r high + id low?
+        |       |
+        |       └── CPU pressure
+        |             ↓
+        |          top / ps
+        |             ↓
+        |          top -H / pidstat
+        |
+        +-- b/wa high?
+        |       |
+        |       └── investigate storage
+        |             ↓
+        |          iostat -xz 1
+        |
+        +-- neither?
+                |
+                └── investigate network,
+                    memory, sync, GPU,
+                    or external dependency
+```
+
+For a suspected network issue:
+
+```text
+Network suspected
+      ↓
+sar -n DEV 1
+      ↓
+interface saturated?
+      |
+   +--+--+
+   |     |
+  YES   NO
+   |     |
+capacity/path   ss -ti
+               ↓
+          TCP connection?
+               ↓
+          remote service/path
 ```
 
 Move from system-level evidence to ownership:
 
 ```text
-vmstat / iostat
+vmstat / iostat / sar
       ↓
-which resource?
+which resource or layer?
       ↓
-top / ps
+top / ps / ss
       ↓
-which process?
+which process or connection?
       ↓
-top -H / pidstat -t
+top -H / pidstat
       ↓
 which thread?
       ↓
@@ -328,21 +545,39 @@ ps -eo pid,ppid,stat,comm,%cpu --sort=-%cpu
 
 ```bash
 pidstat -u 1
-pidstat -t -p <PID> 1
+pidstat -u -t -p <PID> 1
 top -H -p <PID>
 ```
 
 ### Context switching
 
 ```bash
-pidstat -w -p <PID> 1
+pidstat -w -t -p <PID> 1
+```
+
+### Network
+
+```bash
+ip addr
+ip route
+sar -n DEV 1
+ss -ti
 ```
 
 Remember the progression:
 
 ```text
 vmstat
-→ system
+→ system CPU/task pressure
+
+iostat
+→ storage
+
+sar
+→ network interface
+
+ss
+→ TCP connection
 
 top / ps
 → process
@@ -352,7 +587,4 @@ top -H / pidstat -t
 
 pidstat -w
 → context switching
-
-iostat
-→ storage
 ```

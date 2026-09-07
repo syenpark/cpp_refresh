@@ -6,8 +6,10 @@ PyTorch distributed-training and GPU timing experiments.
 
 - [DDP Smoke Test](#ddp-smoke-test)
 - [DataLoader / CPU Contention Lab](#dataloader--cpu-contention-lab)
+- [DDP Straggler Lab](#ddp-straggler-lab)
 - [One Training Iteration: CPU → GPU → DDP](#one-training-iteration-cpu--gpu--ddp)
 - [GPU Synchronization vs Distributed Synchronization](#gpu-synchronization-vs-distributed-synchronization)
+- [DDP Sync vs. Gradient Sync](#ddp-sync-vs-gradient-sync)
 - [Training Performance Troubleshooting Map](#training-performance-troubleshooting-map)
 - [Observe CPU Pressure](#observe-cpu-pressure)
 - [GPU Timing on M2](#gpu-timing-on-m2)
@@ -20,6 +22,7 @@ PyTorch distributed-training and GPU timing experiments.
 training/
 ├── train.py
 ├── dataloader_benchmark.py
+├── dataloader_benchmark_straggler.py
 ├── distributed_sampler_demo.py
 ├── gpu_inference_timing.py
 └── README.md
@@ -194,6 +197,70 @@ For scaling experiments, keep `num_workers=0` initially so that changing the
 number of DDP ranks is the main experimental variable.
 
 </details>
+
+---
+
+## DDP Straggler Lab
+
+Run the same DataLoader benchmark with one rank artificially slowed down, to
+see what a single straggler does to synchronous DDP training:
+
+```bash
+podman run --rm -it \
+  ghcr.io/syenpark/pytorch-ddp:latest \
+  torchrun \
+    --standalone \
+    --nproc-per-node=4 \
+    -m training.dataloader_benchmark_straggler \
+    --num-workers 0
+```
+
+`--num-workers 0` keeps CPU contention out of the picture so that the
+deliberate straggler is the only variable.
+
+What [./dataloader_benchmark_straggler.py](./dataloader_benchmark_straggler.py)
+does:
+
+* builds the same synthetic dataset and DDP model as the non-straggler
+  benchmark
+* on the very first batch of the first epoch, rank 2 (`RANK = 2`) sleeps for
+  0.5 s after its forward pass — the injected straggler
+* every rank logs its `loader_time`, `forward_time`, and `backward_time` for
+  that first batch
+* rank 0 reduces the total number of processed samples and reports the global
+  throughput
+
+Visually:
+
+```text
+rank 0  forward → backward ─┐
+rank 1  forward → backward ─┤
+rank 2  forward → SLEEP → backward   ← injected straggler (0.5 s)
+rank 3  forward → backward ─┘
+                              ↓
+          DDP gradient sync waits for rank 2
+                              ↓
+                  global throughput decreases
+```
+
+Things to notice:
+
+* one slow rank paces the whole job: the other ranks finish their own backward
+  pass but still block at the gradient synchronization until rank 2 catches up
+* the injected 0.5 s sits **between** the logged stages, so it is not captured
+  by any rank's per-stage timers — it shows up in the end-to-end `elapsed` and
+  in the reduced global throughput
+* run the same workload with
+  `-m training.dataloader_benchmark` (no straggler) to compare the throughput
+  of the identical sync setup
+
+This is the last branch of the
+[Training Performance Troubleshooting Map](#training-performance-troubleshooting-map):
+
+```text
+Are some ranks slower than others?
+    └── YES → straggler / DDP synchronization / communication
+```
 
 ---
 
@@ -405,6 +472,109 @@ DDP AllReduce
 `dist.barrier()` is not what DDP normally uses to synchronize gradients after
 every backward pass. Gradient synchronization uses collectives such as
 AllReduce.
+
+---
+
+## DDP Sync vs. Gradient Sync
+
+Inside DDP training, "synchronization" appears in two distinct forms:
+
+* **process-group sync** — `dist.barrier()`: all ranks block until every rank
+  arrives. No data is moved.
+* **gradient sync** — DDP's per-bucket AllReduce: each rank's local gradients
+  are communicated and combined so every rank ends with identical averaged
+  gradients. Data is moved and reduced.
+
+```text
+dist.barrier()                              DDP gradient sync
+(rendezvous, no data moved)                 (communication + arithmetic)
+
+rank 0 ─────────────┐                       rank 0  grad_0 ─┐
+rank 1 ───────┐     │                       rank 1  grad_1 ─┤
+rank 2 ──────────┐  │                       rank 2  grad_2 ─┤
+                 ▼  ▼                       rank 3  grad_3 ─┘
+              barrier                                  │
+                 │                        AllReduce per  │
+         wait for all ranks               bucket        │
+                 │                                      ▼
+                 ▼                          same averaged gradients
+          all ranks continue                on every rank
+```
+
+### `dist.barrier()` — rendezvous, not data exchange
+
+```python
+dist.barrier()
+```
+
+* imposes ordering: nothing after the barrier runs until every rank arrives
+* moves no model state or gradients
+* in this lab it brackets the timing window — the straggler script calls it
+  around the measured loop; it aligns the start/end of the measurement, it
+  does not synchronize gradients
+
+### Gradient sync — automatic during backward
+
+With `DistributedDataParallel`, `loss.backward()` does more than compute local
+gradients:
+
+```text
+loss.backward()
+     |
+     +-- autograd: compute local gradients for each parameter
+     |
+     +-- reducer: as each gradient bucket becomes ready,
+     |            launch AllReduce to combine it across ranks
+     |
+     v
+     all ranks hold identical averaged gradients
+     |
+     v
+     optimizer.step() applies the same update on every rank
+```
+
+* reduction is **overlapped** with the remaining backward computation: an
+  early bucket can be all-reduced while later buckets are still being computed.
+  It is not a "backward, then barrier" sequence.
+* no explicit `dist.barrier()` is needed for gradient sync — `loss.backward()`
+  triggers it
+* calling `dist.all_reduce()` on a gradient manually on top of DDP would
+  combine already-reduced values again (double reduction)
+
+### Why a straggler stalls the whole job
+
+In the [DDP Straggler Lab](#ddp-straggler-lab), it is the gradient sync, not a
+barrier, that paces the run:
+
+```text
+slow rank's bucket is late
+           |
+           v
+AllReduce cannot complete
+           |
+           v
+every rank's optimizer.step() is delayed
+           |
+           v
+global throughput decreases
+```
+
+Ranks 0, 1, and 3 finish their backward pass, but their AllReduce cannot
+complete until rank 2's gradient bucket arrives. The gradient sync makes all
+ranks move at the pace of the slowest rank.
+
+Mental model:
+
+```text
+dist.barrier()
+→ "wait until everyone is here" — ordering, no data
+
+DDP gradient AllReduce
+→ "combine everyone's gradients" — data + arithmetic
+
+when ranks move at different speeds,
+the gradient AllReduce pins all ranks to the slowest one
+```
 
 ---
 

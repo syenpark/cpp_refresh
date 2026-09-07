@@ -11,8 +11,10 @@ The emphasis is on troubleshooting mental models, not memorising commands.
 - [Blocking, spinning, and sleeping](#blocking-spinning-and-sleeping)
 - [CPU pressure](#cpu-pressure)
 - [I/O diagnosis](#io-diagnosis)
+- [Memory diagnosis](#memory-diagnosis)
 - [Network diagnosis](#network-diagnosis)
 - [Process and thread tools](#process-and-thread-tools)
+- [Tracing and file descriptors](#tracing-and-file-descriptors)
 - [Troubleshooting workflow](#troubleshooting-workflow)
 - [Commands worth remembering](#commands-worth-remembering)
 
@@ -155,6 +157,9 @@ Use `vmstat` for a broad system-level view:
 vmstat 1
 ```
 
+<details>
+<summary><code>vmstat</code> fields</summary>
+
 | Field | Meaning |
 | --- | --- |
 | `r` | Running/runnable tasks |
@@ -167,6 +172,10 @@ vmstat 1
 | `cs` | Context switches |
 | `bi` | Blocks read |
 | `bo` | Blocks written |
+| `si` | Swap in (from disk) per second |
+| `so` | Swap out (to disk) per second |
+
+</details>
 
 Useful first-pass interpretations:
 
@@ -195,6 +204,9 @@ iostat -xz 1
 - `-x` = extended device statistics
 - `-z` = omit devices with no activity in the interval
 
+<details>
+<summary><code>iostat</code> fields</summary>
+
 | Field | Meaning |
 | --- | --- |
 | `r/s` | Reads per second |
@@ -203,6 +215,8 @@ iostat -xz 1
 | `w_await` | Average write completion latency |
 | `aqu-sz` | Average outstanding device I/O requests |
 | `%util` | Time the device was busy |
+
+</details>
 
 `aqu-sz` is a **device I/O queue**, not a CPU scheduler queue. It can contain
 both reads and writes.
@@ -240,6 +254,59 @@ dd if=/dev/zero of=/tmp/io-test.bin bs=4M count=512 conv=fdatasync
 measures one synthetic sequential workload in one environment. It does not
 predict random I/O, fsync-heavy workloads, network storage, database access, or
 production throughput.
+
+## Memory diagnosis
+
+### `free`
+
+Use `free -h` for a quick memory overview:
+
+```bash
+free -h
+```
+
+Columns that matter:
+
+- `used` — memory in use
+- `buff/cache` — kernel buffers and page cache; reclaimable, not "leaked"
+- `available` — estimated free memory for new applications without swapping
+
+A small `free` value next to a large `buff/cache` value is normal: Linux uses
+spare memory for the page cache. `available` is the better signal than `free`
+for "can this host take more work?"
+
+### Swap
+
+`vmstat` reports swap movement with the `si`/`so` fields in the table above —
+pages moving between RAM and disk per second. Swap activity is a symptom, not a
+root cause: the memory pressure behind it still needs an explanation.
+
+### OOM
+
+When the kernel cannot reclaim enough memory, it kills a process. Check the
+kernel log:
+
+```bash
+dmesg | grep -i -E 'out of memory|killed process|oom'
+```
+
+The log names the killed process(es) and how much memory was available.
+
+### PSI — pressure stall information
+
+The kernel exposes pressure metrics per resource:
+
+```bash
+cat /proc/pressure/cpu
+cat /proc/pressure/memory
+cat /proc/pressure/io
+```
+
+Each file reports `some` and `full` averages over 10s, 60s, and 300s windows.
+`some avg10=0.10` means 10% of the last 10 seconds had at least one task
+stalled on that resource. `full` close to `some` means the whole machine is
+waiting; `full` much lower than `some` means only a few tasks are stalled. PSI
+catches memory stalls that are not yet visible as swap or OOM.
 
 ## Network diagnosis
 
@@ -319,11 +386,16 @@ sar -n DEV 1
 
 Useful fields:
 
+<details>
+<summary><code>sar -n DEV</code> fields</summary>
+
 | Field | Meaning |
 | --- | --- |
 | `rxkB/s` | Data received by the interface |
 | `txkB/s` | Data transmitted by the interface |
 | `%ifutil` | Interface utilisation relative to reported link capacity |
+
+</details>
 
 Question answered:
 
@@ -449,6 +521,59 @@ For context switching:
 High values alone do not prove a problem. Interpret them with runnable pressure,
 CPU utilisation, latency, and workload behaviour.
 
+Also in the lab image and worth having on hand:
+
+- `htop` — interactive `top` with per-thread and tree views
+- `pstree` — process / thread hierarchy as a tree
+- `fuser -v <path-or-port>` — which PID is using a file or network port
+- `ping` — basic reachability; only proves ICMP, not application-layer health
+
+## Tracing and file descriptors
+
+### `strace`
+
+`strace` records the system calls a process makes. Use it when `top -H` and
+`pidstat` have identified the thread but not *why* it is stuck:
+
+```bash
+strace -f -p <PID>
+```
+
+- `-f` — follow forked children
+- `-p` — attach to an existing process
+
+For a per-syscall summary instead of a live stream:
+
+```bash
+strace -c -p <PID>
+```
+
+The summary shows which syscalls dominate, for example repeated `futex`, `poll`,
+or `read` calls. It distinguishes "blocked waiting for a lock" from "blocked on
+a socket receive" from "doing heavy I/O".
+
+Attaching requires permission; in the lab image that is covered by the
+`--cap-add=SYS_PTRACE` flag on the run command in the repository root README.
+
+### `lsof`
+
+`lsof` lists open files — and because "a file" includes sockets, pipes, and
+loaded libraries, it shows what a process is holding open:
+
+```bash
+lsof -p <PID>
+lsof -i :port
+lsof +L1
+```
+
+- `-p` — files opened by one process
+- `-i :port` — processes using a given TCP or UDP port
+- `+L1` — files with a link count below 1, i.e. open but already deleted
+
+Open-but-deleted files are the classic "disk is full but nothing seems to own
+the space" case: a process keeps a deleted file open, so the space is not
+released until that process closes it.
+
 ## Troubleshooting workflow
 
 Use this instead of blindly running commands:
@@ -515,6 +640,10 @@ top -H / pidstat
       ↓
 which thread?
       ↓
+strace / lsof
+      ↓
+which syscall? what is held open?
+      ↓
 application-level measurement
       ↓
 root cause
@@ -555,6 +684,23 @@ top -H -p <PID>
 pidstat -w -t -p <PID> 1
 ```
 
+### Memory
+
+```bash
+free -h
+dmesg | grep -i -E 'out of memory|killed process|oom'
+cat /proc/pressure/memory
+```
+
+### Tracing
+
+```bash
+strace -f -p <PID>
+strace -c -p <PID>
+lsof -p <PID>
+lsof -i :port
+```
+
 ### Network
 
 ```bash
@@ -573,6 +719,9 @@ vmstat
 iostat
 → storage
 
+free / dmesg / /proc/pressure/memory
+→ memory
+
 sar
 → network interface
 
@@ -587,4 +736,10 @@ top -H / pidstat -t
 
 pidstat -w
 → context switching
+
+strace
+→ which syscall the thread is stuck on
+
+lsof
+→ open files / sockets
 ```

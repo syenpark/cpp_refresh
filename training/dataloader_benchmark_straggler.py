@@ -52,7 +52,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-size", type=int, default=10_000)
     parser.add_argument("--work", type=int, default=100)
     parser.add_argument("--epochs", type=int, default=2)
-    parser.add_argument("--before-backward", type=int, default=2)
 
     return parser.parse_args()
 
@@ -99,13 +98,18 @@ def main() -> None:
     total_samples = 0
 
     for epoch_idx in range(args.epochs):
+        loader_start = time.perf_counter()
+
         for batch_idx, (x, y) in enumerate(loader):
+            loader_time = time.perf_counter() - loader_start
             optimizer.zero_grad()
 
+            t0 = time.perf_counter()
             prediction = model(x)
             loss = loss_fn(prediction, y)
+            forward_time = time.perf_counter() - t0
 
-            # Inject exactly one artifical starggler.
+            # Inject exactly one artifical straggler.
             if rank == RANK and epoch_idx == 0 and batch_idx == 0:
                 time.sleep(0.5)
 
@@ -115,11 +119,14 @@ def main() -> None:
 
             if epoch_idx == 0 and batch_idx == 0:
                 logger.info(
-                    "rank=%s backward_time=%.4fs",
+                    "rank=%s loader_time=%.4fs forward_time=%.4fs backward_time=%.4fs",
                     rank,
+                    loader_time,
+                    forward_time,
                     backward_time,
                 )
             optimizer.step()
+            loader_start = time.perf_counter()
 
             total_samples += x.size(0)
 

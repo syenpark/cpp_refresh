@@ -113,23 +113,23 @@ As model inference becomes faster and more efficient, the true bottleneck often 
 
 In AI-heavy applications—such as video streaming, autonomous driving, smart cities, and trading—optimizing everything beyond inference is critical. C++ plays a key role in eliminating these inefficiencies and squeezing out those final milliseconds. Therefore, I will simulate the Python hot path for processing object detection metadata and re-implement it in C++ to achieve the performance gains needed for real-time applications.
 
-Install the Python dependencies and run the example locally with uv:
+Install the Python dependencies with uv:
 
 ```bash
 uv sync
-uv run train
+```
+
+The DDP example needs a process group, so run it locally through `torchrun`
+(set the process count with `--nproc-per-node`):
+
+```bash
+uv run torchrun --standalone --nproc-per-node=2 -m training.train
 ```
 
 Run the M2 GPU timing example:
 
 ```bash
 uv run python training/gpu_inference_timing.py
-```
-
-For multi-process execution, launch it with `torchrun` and set the desired process count:
-
-```shell
-torchrun --standalone --nproc-per-node=2 -m training.train
 ```
 
 The training image is built by the [`Build PyTorch DDP Container`](./.github/workflows/build-training-env.yml) workflow. CI builds the project wheel with uv and installs the wheel in the container.

@@ -494,6 +494,7 @@ distributed across threads or dominated by one thread.
 Snapshot and process inventory:
 
 ```bash
+ps -ef
 ps -eo pid,ppid,stat,comm,%cpu --sort=-%cpu
 ```
 
@@ -578,6 +579,37 @@ released until that process closes it.
 
 Use this instead of blindly running commands:
 
+### Troubleshooting tree to remember
+
+Start with the broad signal, then narrow down to the responsible process or
+thread:
+
+```text
+CPU suspected
+      vmstat 1          → r high, id low
+      top               → identify the process
+      pidstat -u        → measure process CPU usage
+      pidstat -u -t     → identify the thread
+
+Context-switch suspected
+      pidstat -w -t -p <PID> 1
+      → compare voluntary and involuntary switches with CPU pressure and latency
+
+I/O suspected
+      vmstat 1                  → b high, wa high
+      ps -eo pid,stat,wchan,comm → find blocked processes and wait channels
+      pidstat -d                → inspect per-process I/O
+      iostat -xz 1              → inspect device latency and utilisation
+
+Network suspected
+      ss -tuna          → inspect socket states
+      sar -n DEV 1      → inspect interface traffic and utilisation
+      sar -n TCP 1      → inspect TCP-level errors and retransmissions
+```
+
+The signals are clues, not proof: confirm the suspected bottleneck with the
+next command in the path and then measure again after mitigation.
+
 ```text
 Application is slow
         |
@@ -603,26 +635,6 @@ vmstat
                 └── investigate network,
                     memory, sync, GPU,
                     or external dependency
-```
-
-For a suspected network issue:
-
-```text
-Network suspected
-      ↓
-sar -n DEV 1
-      ↓
-interface saturated?
-      |
-   +--+--+
-   |     |
-  YES   NO
-   |     |
-capacity/path   ss -ti
-               ↓
-          TCP connection?
-               ↓
-          remote service/path
 ```
 
 Move from system-level evidence to ownership:

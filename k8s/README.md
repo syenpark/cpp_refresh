@@ -37,10 +37,7 @@ Mental model:
 Controller → Pod → Container → Process
 ```
 
-* **Job/Deployment**: manages desired state.
-* **Pod**: Kubernetes execution unit.
-* **Container**: runs inside the Pod.
-* **Process**: actual application execution.
+A **Job/Deployment** (controller) manages desired state; a **Pod** is the execution unit, running containers, each a process.
 
 `--context` selects which Kubernetes cluster/context to use. Once `kind-mle-lab` is the current context, it can be omitted.
 
@@ -119,29 +116,16 @@ workload=reserved:NoSchedule      workload=reserved:NoSchedule
        This taint does NOT block this Pod
 ```
 
-Node has `taint`:
-"Pods are blocked unless allowed"; Pods should not be scheduled onto me unless they are allowed to tolerate this restriction.
+Node has `taint` — "do not schedule Pods onto me unless they tolerate this":
 
 ```bash
-# Define the tain on the node
+# Define the taint on the node
 kubectl taint node <node> workload=reserved:NoSchedule
 # Inspect
 kubectl describe node <node>
 ```
 
-Pod has `toleration`:
-"I am allowed through this specific block"
-
-so,
-
-```text
-taint on node + no matching toleration
-→ Pod cannot use that node
-
-taint on node + matching toleration
-→ that taint stops blocking the Pod
-
-```
+Pod has `toleration` — "I am allowed through this specific block".
 
 The sequence is
 
@@ -165,9 +149,7 @@ node rejected    taint barrier removed
       may be selected      node rejected
 ```
 
-**Taint blocks. Toleration unblocks that specific taint. It does not schedule the Pod by itself.**
-
-A `matching toleration` removes that taint as a scheduling barrier, while it does not guarantee scheduling.
+**Taint blocks. Toleration unblocks that specific taint — it removes the barrier, but does not schedule the Pod by itself.**
 
 #### Resource failure vs taint failure
 
@@ -420,13 +402,7 @@ To determine **why the process terminated**:
 kubectl describe pod <pod-name>
 ```
 
-Check:
-
-```text
-Last State:   Terminated
-Reason:       Completed
-Exit Code:    0
-```
+Check `Last State: Terminated`:
 
 Successful termination:
 
@@ -458,18 +434,8 @@ kubectl logs <pod-name> --previous
 Troubleshooting mental model:
 
 ```text
-CrashLoopBackOff
+CrashLoopBackOff = "container keeps terminating" ≠ "application definitely crashed"
         ↓
-"Container keeps terminating"
-
-        ≠
-
-"Application definitely crashed"
-```
-
-Always ask:
-
-```text
 Why did the previous process terminate?
         ↓
 kubectl describe pod
@@ -524,42 +490,9 @@ Events:
 
 ### Useful troubleshooting commands
 
-**Why is this Pod Pending / failing?**
+Use the same Pod-vs-Node inspection as in [the Scheduler section](#pod-vs-node-what-to-inspect): `kubectl describe pod` (Events → `FailedScheduling`), `kubectl get pod -o yaml` (requests/tolerations), `kubectl describe node` (allocatables/taints).
 
-```bash
-kubectl describe pod <pod>
-```
-
-Look at `Events`, especially `FailedScheduling`.
-
-**What is this Pod actually configured to request/tolerate?**
-
-```bash
-kubectl get pod <pod> -o yaml
-```
-
-Check things such as:
-
-```text
-resources:
-  limits:
-    nvidia.com/gpu: 2
-
-tolerations:
-  - key: workload
-    value: reserved
-    effect: NoSchedule
-```
-
-Then,
-
-**What is this Pod actually configured to request/tolerate?**
-
-```bash
-kubectl describe node <node>
-```
-
-The mendel model is:
+The mental model is:
 
 ```text
 Pod Pending
@@ -573,4 +506,4 @@ resource problem?
 
 taint problem?
 → compare Node taint vs Pod toleration
-```text
+```

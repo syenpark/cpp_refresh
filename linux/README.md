@@ -7,8 +7,7 @@ The emphasis is on troubleshooting mental models, not memorising commands.
 ## Contents
 
 - [Core mental model](#core-mental-model)
-- [Process states](#process-states)
-- [Blocking, spinning, and sleeping](#blocking-spinning-and-sleeping)
+- [Process states and waiting](#process-states-and-waiting)
 - [CPU pressure](#cpu-pressure)
 - [I/O diagnosis](#io-diagnosis)
 - [Memory diagnosis](#memory-diagnosis)
@@ -44,70 +43,209 @@ For PyTorch pipeline flow, DataLoader workers, GPU starvation, synchronization,
 and stage timing, see the [Training Lab](../training/README.md). This guide
 focuses on the Linux-level signals and tools used to investigate those systems.
 
-## Process states
+## Process states and waiting
 
-### Running
+The important distinction is:
 
-A task is executing instructions on a CPU core. Only as many tasks can run
-simultaneously as there are available logical CPUs.
+```text
+Can this task run if a CPU becomes available?
 
-### Runnable
+YES
+├─ Running  → currently executing on a CPU
+└─ Runnable → ready to execute, waiting for CPU
 
-A task is ready to run but waiting for CPU scheduling. It is not waiting for
-I/O; it simply cannot get CPU time immediately. Sustained runnable pressure is
-one signal of CPU contention.
+NO
+├─ S state  → interruptible sleep
+└─ D state  → uninterruptible sleep
+```
 
-### Blocked / uninterruptible sleep
+Linux uses TASK_RUNNING for both currently running and runnable tasks.
 
-A task is waiting in uninterruptible sleep, commonly because the kernel is
-waiting for I/O or another low-level operation to complete. It does not
-continuously consume CPU while waiting.
+`vmstat r` therefore reflects running/runnable CPU demand, while `vmstat b`
+counts tasks in uninterruptible sleep (D state).
 
-### Sleeping
+<details>
+<summary>Runnable vs D state</summary>
 
-A task voluntarily waits for a condition or time, for example with `sleep()`,
-`condition_variable.wait()`, `poll()`, or `select()`.
+**Runnable**
 
-## Blocking, spinning, and sleeping
+"I can run now; I only need CPU time."
+
+Typical causes:
+
+- normal computation
+- a preempted CPU-bound thread
+- a spinning thread waiting for a condition
+
+**D state**
+
+"Giving me CPU would not help yet; I am waiting for a kernel operation to complete."
+
+Common causes:
+
+- storage I/O
+- NFS / some filesystem operations
+- other kernel-level waits
+
+D does not mean "all blocked threads." It is one specific Linux task state.
+
+</details>
+
+### Blocking is not a Linux task state
+
+"Blocked" is a general programming term meaning:
+
+the thread cannot make progress until some condition, event, or resource changes.
+
+A blocked thread may commonly be:
+
+```text
+S state
+→ mutex wait
+→ condition variable wait
+→ sleep / poll / select
+
+D state
+→ storage or other uninterruptible kernel wait
+```
+
+So:
+
+```text
+blocked ≠ D state
+vmstat b ≈ D-state tasks
+```
 
 ### Spinning
 
-A thread repeatedly checks a condition:
+Spinning describes behaviour, not a separate scheduler state:
 
 ```cpp
-while (!queue.empty()) {
-    // poll for work
+while (!ready.load()) {
+    // keep checking
 }
 ```
 
-It remains runnable and can consume CPU. Spinning can be useful when the wait
-is extremely short, but excessive spinning wastes CPU.
+The thread remains eligible to run:
 
-### Blocking
-
-A thread waits for an event or resource and gives up CPU execution while
-waiting:
-
-```cpp
-condition_variable.wait(lock);
+```text
+scheduled on CPU → Running
+preempted        → Runnable
 ```
 
-A blocking operation can cause a context switch, but blocking and context
-switching are not the same thing.
+It does not sleep while spinning, so it can consume CPU continuously.
 
-### Sleeping
+<details>
+<summary>Mutex, atomic, and waiting</summary>
 
-A sleeping thread does not consume CPU while waiting for time or an event. It
-becomes eligible to run again when the sleep expires or it is notified.
+mutex and atomic are synchronization mechanisms, not task states.
 
-| State or behaviour | CPU while waiting? | Typical reason |
-| --- | ---: | --- |
-| Running | Yes | Executing instructions |
-| Runnable | No, waiting for CPU | Scheduling pressure |
-| Spinning | Yes | Repeated polling |
-| Blocked | No | I/O or kernel-level wait |
-| Sleeping | No | Time or event wait |
-| Context switch | N/A | CPU changes task |
+**Mutex**
+
+If uncontended:
+
+```text
+Running
+→ acquire lock
+→ continue
+```
+
+If contended, a typical blocking mutex may:
+
+```text
+Running
+→ wait / sleep
+→ wake
+→ Runnable
+→ Running
+```
+
+A mutex does not necessarily cause a context switch; the uncontended fast path
+may complete entirely in user space.
+
+**Atomic operation**
+
+```cpp
+counter.fetch_add(1);
+```
+
+Usually performs a short atomic operation while the thread is Running.
+
+Atomicity itself does not mean:
+
+- spinning
+- sleeping
+- blocking
+- no context switching
+
+The surrounding algorithm decides the waiting behaviour.
+
+For example:
+
+```cpp
+while (!flag.load()) {}
+```
+
+is atomic + spinning.
+
+A blocking API such as `atomic::wait()` can instead sleep while waiting.
+
+</details>
+
+### SPSC queue mental model
+
+SPSC means:
+
+- one producer
+- one consumer
+
+It does not require lock-free implementation.
+
+```text
+SPSC + mutex
+→ valid and simple
+→ contention may block
+
+SPSC + lock-free atomics
+→ avoids mutex ownership contention
+→ usually avoids the blocking lock path
+→ can reduce latency/jitter
+```
+
+Lock-free does not automatically mean "no context switches" or "no waiting."
+For example, an empty queue may be handled by spinning, returning immediately,
+or a separate blocking mechanism.
+
+### Quick mental map
+
+```text
+Running
+→ executing now
+
+Runnable
+→ CPU-ready, waiting for CPU
+
+S
+→ interruptible sleep
+
+D
+→ uninterruptible sleep
+→ counted by vmstat b
+
+Spinning
+→ behaviour while Running/Runnable
+→ consumes CPU
+
+Blocking
+→ general programming concept
+→ commonly S or D
+
+Mutex
+→ protects a critical section
+
+Atomic
+→ provides atomic operations / synchronization semantics
+```
 
 ## CPU pressure
 
@@ -126,10 +264,9 @@ us + sy = 95%, id = 5%, r = 14
 Do not conclude CPU contention from one `r` value. Look for sustained runnable
 pressure together with low idle time.
 
-### Mutex and condition variable
+### Condition variable
 
-A mutex protects shared state. A condition variable lets a thread wait
-without spinning:
+A condition variable lets a thread wait without spinning:
 
 ```cpp
 cv.wait(lock, predicate);
@@ -163,7 +300,7 @@ vmstat 1
 | Field | Meaning |
 | --- | --- |
 | `r` | Running/runnable tasks |
-| `b` | Tasks in uninterruptible sleep |
+| `b` | Tasks in uninterruptible sleep (`D` state) |
 | `us` | User CPU |
 | `sy` | System/kernel CPU |
 | `id` | Idle CPU |

@@ -51,7 +51,8 @@ def measure_forward(x: torch.Tensor, device: torch.device) -> float:
 
     start = time.perf_counter()
 
-    _ = model(x)
+    with torch.no_grad():
+        _ = model(x)
 
     # Wait until GPU really finishes.
     synchronize(device)
@@ -116,6 +117,7 @@ def main() -> None:
     synchronize(device)
 
     preprocess_times = []
+    h2d_times = []
     forward_times = []
 
     profiler_context, profiler = profiling_context(device)
@@ -127,8 +129,15 @@ def main() -> None:
             x_processed, preprocess_time = measure_preprocess(x_cpu)
             preprocess_times.append(preprocess_time)
 
+            start = time.perf_counter()
+
             # H2D transfer
             x_gpu = x_processed.to(device)
+
+            synchronize(device)
+
+            h2d_time = time.perf_counter() - start
+            h2d_times.append(h2d_time)
 
             # GPU stage
             forward_time = measure_forward(x_gpu, device)
@@ -140,6 +149,11 @@ def main() -> None:
     logger.info(
         "avg preprocess latency: %.4fs",
         sum(preprocess_times) / len(preprocess_times),
+    )
+
+    logger.info(
+        "avg H2D latency: %.4fs",
+        sum(h2d_times) / len(h2d_times),
     )
 
     logger.info(

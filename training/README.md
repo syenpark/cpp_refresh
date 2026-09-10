@@ -655,13 +655,34 @@ Consider:
 * compute inefficiency
 * infrastructure limits
 
-## GPU Timing on M2
+## GPU Timing and Profiling
 
 Run locally on macOS:
 
 ```bash
 python training/gpu_inference_timing.py
 ```
+
+Profile the CPU preprocessing, device transfer, and synchronized forward
+stages. The default selects CUDA when available, otherwise MPS:
+
+```bash
+python training/gpu_inference_profiling.py
+```
+
+Select a backend explicitly:
+
+```bash
+# Apple Silicon / MPS
+python training/gpu_inference_profiling.py --device mps
+
+# NVIDIA GPU / CUDA
+python training/gpu_inference_profiling.py --device cuda
+```
+
+The MPS run records an MPS Instruments trace. The CUDA run uses
+`torch.profiler` and writes `gpu_inference_cuda_trace.json`, which can be
+opened in Chrome tracing or TensorBoard.
 
 Compare naive timing with synchronized timing:
 

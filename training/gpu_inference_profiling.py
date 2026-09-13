@@ -45,19 +45,21 @@ def synchronize(device: torch.device) -> None:
         torch.mps.synchronize()
 
 
-def measure_forward(x: torch.Tensor, device: torch.device) -> float:
+def measure_forward(
+    x: torch.Tensor, device: torch.device
+) -> tuple[torch.Tensor, float]:
     """Measure actual GPU forward latency."""
     synchronize(device)
 
     start = time.perf_counter()
 
     with torch.no_grad():
-        _ = model(x)
+        output = model(x)
 
     # Wait until GPU really finishes.
     synchronize(device)
 
-    return time.perf_counter() - start
+    return output, time.perf_counter() - start
 
 
 def select_device(requested_device: str) -> torch.device:
@@ -80,6 +82,21 @@ def select_device(requested_device: str) -> torch.device:
         return torch.device("mps")
     msg = "No CUDA or MPS device is available"
     raise RuntimeError(msg)
+
+
+def measure_postprocess(x: torch.Tensor) -> tuple[torch.Tensor, float, float]:
+    """Measure D2H transfer and CPU postprocessing latency."""
+    # D2H
+    start = time.perf_counter()
+    output_cpu = x.cpu()
+    d2h_time = time.perf_counter() - start
+
+    # CPU postprocessing
+    start = time.perf_counter()
+    result = torch.clamp(output_cpu, min=0.0)
+    postprocess_time = time.perf_counter() - start
+
+    return result, d2h_time, postprocess_time
 
 
 def profiling_context(device: torch.device) -> tuple[Any, Any]:
@@ -119,12 +136,12 @@ def main() -> None:
     preprocess_times = []
     h2d_times = []
     forward_times = []
-
+    d2h_times = []
+    postprocess_times = []
     profiler_context, profiler = profiling_context(device)
+
     with profiler_context:
-
         for _ in range(10):
-
             # CPU stage
             x_processed, preprocess_time = measure_preprocess(x_cpu)
             preprocess_times.append(preprocess_time)
@@ -140,8 +157,13 @@ def main() -> None:
             h2d_times.append(h2d_time)
 
             # GPU stage
-            forward_time = measure_forward(x_gpu, device)
+            output, forward_time = measure_forward(x_gpu, device)
             forward_times.append(forward_time)
+
+            # Postprocessing stage
+            _, d2h_time, postprocess_time = measure_postprocess(output)
+            d2h_times.append(d2h_time)
+            postprocess_times.append(postprocess_time)
 
     if profiler is not None:
         profiler.export_chrome_trace("gpu_inference_cuda_trace.json")
@@ -159,6 +181,16 @@ def main() -> None:
     logger.info(
         "avg forward+synchronize latency: %.4fs",
         sum(forward_times) / len(forward_times),
+    )
+
+    logger.info(
+        "avg D2H latency: %.4fs",
+        sum(d2h_times) / len(d2h_times),
+    )
+
+    logger.info(
+        "avg postprocess latency: %.4fs",
+        sum(postprocess_times) / len(postprocess_times),
     )
 
 

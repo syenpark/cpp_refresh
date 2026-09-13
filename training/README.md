@@ -12,7 +12,7 @@ PyTorch distributed-training and GPU timing experiments.
 - [DDP Sync vs. Gradient Sync](#ddp-sync-vs-gradient-sync)
 - [Training Performance Troubleshooting Map](#training-performance-troubleshooting-map)
 - [Observe CPU Pressure](#observe-cpu-pressure)
-- [GPU Timing on M2](#gpu-timing-on-m2)
+- [GPU Timing and Profiling](#gpu-timing-and-profiling)
 - [DistributedSampler Demo](#distributedsampler-demo)
 - [Environment](#environment)
 
@@ -27,6 +27,7 @@ training/
 ├── dataloader_benchmark_straggler.py
 ├── distributed_sampler_demo.py
 ├── gpu_inference_timing.py
+├── gpu_inference_profiling.py
 └── README.md
 ```
 

@@ -132,6 +132,12 @@ Run the M2 GPU timing example:
 uv run python training/gpu_inference_timing.py
 ```
 
+Profile the synchronized GPU stages with the inference profiling script:
+
+```bash
+uv run python training/gpu_inference_profiling.py
+```
+
 The training image is built by the [`Build PyTorch DDP Container`](./.github/workflows/build-training-env.yml) workflow. CI builds the project wheel with uv and installs the wheel in the container.
 
 ### Hot loop

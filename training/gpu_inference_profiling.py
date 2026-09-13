@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import statistics
 import time
 from typing import Any
 
@@ -20,7 +21,7 @@ def model(x: torch.Tensor) -> torch.Tensor:
 
 def cpu_preprocess(x: torch.Tensor) -> torch.Tensor:
     """Artificial CPU preprocessing workload."""
-    for _ in range(100):
+    for _ in range(200):
         x = torch.sin(x) + torch.cos(x)
 
     return x
@@ -99,6 +100,14 @@ def measure_postprocess(x: torch.Tensor) -> tuple[torch.Tensor, float, float]:
     return result, d2h_time, postprocess_time
 
 
+def measure_h2d_transfer(x_processed: torch.Tensor, device: torch.device) -> float:
+    """Measure pure host-to-device transfer latency for a fixed processed tensor."""
+    start = time.perf_counter()
+    _ = x_processed.to(device)
+    synchronize(device)
+    return time.perf_counter() - start
+
+
 def profiling_context(device: torch.device) -> tuple[Any, Any]:
     """Return the profiler context and optional profiler object for a device."""
     if device.type == "mps":
@@ -133,30 +142,26 @@ def main() -> None:
 
     synchronize(device)
 
-    preprocess_times = []
+    preprocess_times: list[float] = []
     h2d_times = []
     forward_times = []
     d2h_times = []
     postprocess_times = []
     profiler_context, profiler = profiling_context(device)
 
+    # Isolate CPU preprocessing from the pure H2D transfer measurement.
+    for _ in range(10):
+        x_processed, preprocess_time = measure_preprocess(x_cpu)
+        preprocess_times.append(preprocess_time)
+
+    # Measure transfer repeatedly using one fixed processed tensor.
+    h2d_times = [measure_h2d_transfer(x_processed, device) for _ in range(100)]
+
     with profiler_context:
         for _ in range(10):
-            # CPU stage
-            x_processed, preprocess_time = measure_preprocess(x_cpu)
-            preprocess_times.append(preprocess_time)
-
-            start = time.perf_counter()
-
-            # H2D transfer
+            # GPU stage uses the fixed processed tensor so transfer cost is not
+            # mixed with the heavy CPU preprocessing workload.
             x_gpu = x_processed.to(device)
-
-            synchronize(device)
-
-            h2d_time = time.perf_counter() - start
-            h2d_times.append(h2d_time)
-
-            # GPU stage
             output, forward_time = measure_forward(x_gpu, device)
             forward_times.append(forward_time)
 
@@ -169,28 +174,28 @@ def main() -> None:
         profiler.export_chrome_trace("gpu_inference_cuda_trace.json")
 
     logger.info(
-        "avg preprocess latency: %.4fs",
-        sum(preprocess_times) / len(preprocess_times),
+        "median preprocess latency: %.4fs",
+        statistics.median(preprocess_times),
     )
 
     logger.info(
-        "avg H2D latency: %.4fs",
-        sum(h2d_times) / len(h2d_times),
+        "median H2D latency: %.4fs",
+        statistics.median(h2d_times),
     )
 
     logger.info(
-        "avg forward+synchronize latency: %.4fs",
-        sum(forward_times) / len(forward_times),
+        "median forward+synchronize latency: %.4fs",
+        statistics.median(forward_times),
     )
 
     logger.info(
-        "avg D2H latency: %.4fs",
-        sum(d2h_times) / len(d2h_times),
+        "median D2H latency: %.4fs",
+        statistics.median(d2h_times),
     )
 
     logger.info(
-        "avg postprocess latency: %.4fs",
-        sum(postprocess_times) / len(postprocess_times),
+        "median postprocess latency: %.4fs",
+        statistics.median(postprocess_times),
     )
 
 

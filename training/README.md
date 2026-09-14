@@ -769,6 +769,8 @@ batch_gpu = batch_cpu.to("cuda")  # H2D
 output = model(batch_gpu)    # GPU compute
 ```
 
+[Colab Tensorboard GPU profiling example](https://colab.research.google.com/drive/1zIQs4xS_cmJJhHvyKpmmPW6xXtTXgH5Y#scrollTo=iCT4ynRMDmuF)
+
 ## DistributedSampler Demo
 
 Run with four distributed worker processes:

@@ -294,6 +294,27 @@ Use `vmstat` for a broad system-level view:
 vmstat 1
 ```
 
+A common source of confusion is that `D`, `b`, and `%wa` describe related I/O wait phenomena from different viewpoints:
+
+```text
+D    = STATE
+      "What state is this particular process in?"
+
+b    = COUNT
+      "How many tasks are blocked?"
+
+%wa  = CPU TIME
+      "How much CPU idle time occurred while I/O was outstanding?"
+```
+
+In other words:
+
+- `D` is a per-task kernel state; you usually observe it with `ps` or `/proc/<pid>/status`.
+- `b` is the aggregate count from `vmstat`: how many tasks are currently in uninterruptible sleep.
+- `%wa` is a system-wide CPU-time signal: how much CPU time was idle because I/O was outstanding.
+
+So `D` is not directly observable in `vmstat`; `vmstat` exposes the aggregate effect (`b`) and the CPU-time view (`%wa`), not the state of one task.
+
 <details>
 <summary><code>vmstat</code> fields</summary>
 

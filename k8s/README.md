@@ -473,6 +473,12 @@ spec:
 
 `requests` are what the scheduler uses to decide placement; `limits` are what the kubelet enforces at runtime. Setting both equal gives guaranteed, QoS-level CPU. Applying the amended manifest will leave the pod `Pending`. Then:
 
+### CPU overcommit vs GPU allocation
+
+CPU can be overcommitted: the scheduler places Pods using their CPU `requests`, while the total CPU `limits` may exceed the node's capacity. CPU is time-shareable, so workloads compete when demand is high.
+
+GPUs are normally not overcommitted. A device plugin advertises discrete extended resources such as `nvidia.com/gpu: 1`, and the scheduler will not allocate the same GPU to another Pod. GPU requests generally must equal limits. GPU time-slicing, MIG, or vGPU can enable sharing, but those require explicit device-plugin support.
+
 ```bash
 kubectl apply -f resource-demo.yaml
 kubectl get pods

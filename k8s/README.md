@@ -9,6 +9,7 @@ Local Kubernetes lab using **kind + Podman** on an M2 MacBook.
 - [Job Lab](#job-lab)
 - [Deployment Lab](#deployment-lab)
 - [Job vs Deployment](#job-vs-deployment)
+- [Job Running vs Pod Running](#job-running-vs-pod-running)
 - [Service Discovery and DNS Lab](#service-discovery-and-dns-lab)
 - [CrashLoopBackOff](#crashloopbackoff)
 - [Resource requests](#resource-requests)
@@ -308,6 +309,32 @@ finite process exits 0
 Use a **Job** for finite workloads such as training/batch processing.
 
 Use a **Deployment** for continuously running workloads such as inference services.
+
+---
+
+## Job Running vs Pod Running
+
+**Pod Running** = the process is alive (kubelet's view).
+**Job Running** = the controller has not yet observed completion (Job controller's view).
+
+Three layers of truth:
+
+```text
+Scheduler      Can the Pod be placed?     → Pending / Scheduled
+Container      Is the process alive?      → Running / Terminated
+Application    Is training progressing?   → epochs / checkpoints
+```
+
+Kubernetes only observes the first two layers — it does not understand your training loop.
+
+| Job       | Pod                     | Meaning / next step                                                    |
+| --------- | ----------------------- | ---------------------------------------------------------------------- |
+| Running   | Running                 | Normal — verify the app is progressing (logs, epochs, GPU utilization) |
+| Running   | Pending                 | Scheduling problem — check resources, taints, GPU (see Scheduler)      |
+| Running   | Running, logs stuck, GPU idle | Application stuck (deadlock, DDP rank waiting, dataloader, infinite loop) — the process never exits, so the Job stays Running |
+| Completed | Completed               | Process exited `0`, completion satisfied                               |
+
+Mental model: Kubernetes may report everything healthy while the ML workload is not making progress. When both Job and Pod are Running, ask layer 3: *is the application actually advancing?*
 
 ---
 

@@ -264,6 +264,55 @@ us + sy = 95%, id = 5%, r = 14
 Do not conclude CPU contention from one `r` value. Look for sustained runnable
 pressure together with low idle time.
 
+### Example: r=12 on 8 cores
+
+```text
+vmstat 1  →  r = 12,  b = 0,  wa ≈ 0,  id ≈ 0%   (8 cores)
+```
+
+Primary hypothesis: **CPU contention**. `id ≈ 0%` means the CPUs are busy,
+and `r = 12 > 8` means runnable demand exceeds available cores. `b = 0` and
+`wa ≈ 0` make I/O blocking unlikely.
+
+Then narrow down ownership, one level at a time:
+
+```text
+ps -eo pid,ppid,stat,comm,%cpu --sort=-%cpu   → which process?
+top -H -p <PID>  or  pidstat -u -t -p <PID> 1 → which thread?
+```
+
+If CPU usage is spread evenly across threads, still ask whether it is expected
+computation or excessive spinning/contention — 8 threads × 100% CPU can be
+either healthy parallel work or threads spinning on a lock.
+
+<details>
+<summary>Why does the parent process show 0% CPU?</summary>
+
+Many tools fork workers and let them do the work:
+
+```text
+stress (235)   STAT S+   %CPU  0.0   ← forks, then waits
+ ├─ stress (236)  STAT R+  %CPU 99.5
+ ├─ stress (237)  STAT R+  %CPU 99.4
+ ├─ stress (238)  STAT R+  %CPU 99.4
+ └─ stress (239)  STAT R+  %CPU 99.5
+```
+
+The parent sits in `wait()`, so it consumes almost no CPU. Each process
+accounts for its own CPU time; **PPID means "who created me", not "who owns
+my CPU usage"**. A `PPID = 235` does not fold the children's CPU into 235.
+
+Troubleshooting consequence: if you only looked at the parent, you would
+miss the problem. That is why the `ps` snapshot lists every process, and
+`pstree -p <PID>` shows the hierarchy at a glance.
+
+Note the distinction from threads: here the work is in **child processes**
+(visible in plain `ps`), whereas `top -H` / `pidstat -t` descend into
+**threads within one process**. Both are "child tasks", but they show up in
+different tools.
+
+</details>
+
 ### Condition variable
 
 A condition variable lets a thread wait without spinning:

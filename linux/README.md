@@ -335,6 +335,51 @@ consumer becomes runnable
 
 ## I/O diagnosis
 
+### What counts as I/O?
+
+I/O is not just disk reads/writes. It is any operation where the task hands
+data to — or waits on — a subsystem other than the CPU:
+
+```text
+CPU
+├─ storage   (SSD/HDD)   read(file), checkpoint load, log write
+├─ network   (NIC)       recv(socket), HTTP request, container image pull
+└─ devices   (GPU, USB, sensors)  hardware command completion
+```
+
+In Linux performance tooling, "I/O wait" (`wa`) mainly refers to
+block device/storage I/O — but network and device waits are still I/O.
+
+### Typical S vs D waits
+
+S/D is about *whether the wait can be interrupted*, not about which I/O type
+is involved:
+
+| Situation | Example | Typical state |
+| --- | --- | --- |
+| time delay | `sleep(10)` | S |
+| mutex wait | contended `lock()` | S (usually) |
+| condition variable | `cv.wait(lock)` | S |
+| socket data | `recv()` with no data yet | S (usually) |
+| local disk read | `read()` on block device | D (possible) |
+| network filesystem | NFS `read()` waiting on remote server | D (possible) |
+| device driver wait | waiting on hardware response | D (possible) |
+
+So the corrected mental model is:
+
+```text
+D = uninterruptible wait for kernel-level operation completion
+    (most common cause: disk/block I/O — not the only one)
+```
+
+Troubleshooting order when you find D-state tasks:
+
+```text
+D → which kernel wait? (ps wchan, strace)
+   → storage / network / device?
+   → that layer's tools (iostat, ss, driver logs)
+```
+
 ### `vmstat`
 
 Use `vmstat` for a broad system-level view:

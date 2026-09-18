@@ -415,8 +415,31 @@ CPU
 local GPU finishes previously submitted CUDA work
 ```
 
-CUDA operations are generally asynchronous relative to the CPU. This is why
-GPU timing often requires:
+CUDA operations are generally asynchronous relative to the CPU. Why:
+
+<details>
+<summary>Why CUDA is async relative to the CPU</summary>
+
+A CUDA call usually does not run on the CPU — it *submits* work to the GPU's
+command queue (via the driver), and the call returns as soon as the submission
+is accepted. The GPU then executes the queued work on its own cores.
+
+```text
+CPU                          GPU
+───                          ───
+model(x) → enqueue kernels →
+returns immediately              ... executing kernels ...
+prepare next batch (overlap)
+```
+
+The host is only forced to wait when it actually needs the result:
+copying data back to the CPU (`.cpu()`), calling synchronize, or a later
+operation in the same stream that depends on the queued work. This is
+intentional design: it lets the CPU stay ahead of the GPU, keeping the GPU
+fed instead of stalling it while the CPU prepares the next batch.
+</details>
+
+This is why GPU timing often requires:
 
 ```python
 torch.cuda.synchronize()

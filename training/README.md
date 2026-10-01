@@ -15,6 +15,7 @@ PyTorch distributed-training and GPU timing experiments.
 - [GPU Timing and Profiling](#gpu-timing-and-profiling)
 - [DistributedSampler Demo](#distributedsampler-demo)
 - [Environment](#environment)
+- [ddp_buckets for DDP concept](#ddp_buckets-for-ddp-concept)
 
 ## Files
 

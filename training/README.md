@@ -820,3 +820,15 @@ M2 MacBook
 ```
 
 Use the Linux Podman container for DDP experiments. Use MPS locally for GPU timing experiments.
+
+### ddp_buckets for DDP concept
+
+[./ddp_buckets](./ddp_buckets/) includes the following examples:
+
+| # | File | Run | What to look at |
+| --- | ------ | ----- | ----------------- |
+| 1 | c1_ddp_buckets.py | `torchrun --nproc_per_node=2 c1_ddp_buckets.py [--bucket-cap-mb 1] [--grad-accum 4 [--no-sync]]` | broadcast at construction, bucket order, hook times inside backward, all-reduce count |
+| 2 | c2_ring_allreduce.py | `torchrun --nproc_per_node=4 c2_ring_allreduce.py` | bytes sent = 2(N-1)/N x S, result matches dist.all_reduce |
+| 3 | c3_cost_model.py | `python c3_cost_model.py` | when comm stops hiding behind backward; FSDP memory |
+| 4 | c4_fsdp_by_hand.py | `torchrun --nproc_per_node=4 c4_fsdp_by_hand.py` | sharded weights give the same answer as DDP with 1/N memory |
+| 5 | c5_hang_demo.py | `torchrun --nproc_per_node=2 c5_hang_demo.py --mode skip` | a skipped collective = hang -> timeout error |

@@ -3,8 +3,8 @@
 Checked against plain DDP math.
 
 Run:
-    torchrun --nproc_per_node=2 c4_fsdp_by_hand.py
-    torchrun --nproc_per_node=4 c4_fsdp_by_hand.py
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c4_fsdp_by_hand.py
+    torchrun --nproc_per_node=4 --master_addr=127.0.0.1 --master_port=29500 c4_fsdp_by_hand.py
 
 Each rank keeps only 1/N of the weight between steps.
   forward : all-gather shards -> full weight (temporary)
@@ -15,7 +15,7 @@ Gloo has no reduce_scatter, so it is emulated as all_reduce + slice (NCCL
 would use dist.reduce_scatter_tensor). Real FSDP also frees the full weight
 after forward and all-gathers it AGAIN in backward -> that is where the 3rd
 (N-1)/N*S of traffic comes from.
-"""
+"""  # noqa: E501
 
 from __future__ import annotations
 

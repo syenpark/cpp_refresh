@@ -1,9 +1,9 @@
 """Concept 5: why distributed jobs hang, and how a timeout turns a hang into an error.
 
 Run (skip mode takes ~30 s):
-    torchrun --nproc_per_node=2 c5_hang_demo.py --mode ok
-    torchrun --nproc_per_node=2 c5_hang_demo.py --mode skip   # rank 1 skips a collective
-    torchrun --nproc_per_node=2 c5_hang_demo.py --mode die    # rank 1 crashes (like an OOM)
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c5_hang_demo.py --mode ok
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c5_hang_demo.py --mode skip   # rank 1 skips a collective
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c5_hang_demo.py --mode die    # rank 1 crashes (like an OOM)
 
 In "die" mode torchrun itself notices the dead worker and SIGTERMs the others, so rank 0
 may be killed before it prints. That is the elastic agent doing its job (see --max-restarts).

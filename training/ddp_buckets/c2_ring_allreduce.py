@@ -1,12 +1,12 @@
 """Concept 2: ring all-reduce by hand (reduce-scatter + all-gather) with send/recv.
 
 Run:
-    torchrun --nproc_per_node=4 c2_ring_allreduce.py
-    torchrun --nproc_per_node=8 c2_ring_allreduce.py --numel 8000000
+    torchrun --nproc_per_node=4 --master_addr=127.0.0.1 --master_port=29500 c2_ring_allreduce.py
+    torchrun --nproc_per_node=8 --master_addr=127.0.0.1 --master_port=29500 c2_ring_allreduce.py --numel 8000000
 
 Checks the result against dist.all_reduce and counts bytes each rank sends.
 Expected: bytes sent per rank = 2 * (N-1)/N * S, where S = tensor size in bytes.
-"""
+"""  # noqa: E501
 
 from __future__ import annotations
 

@@ -1,11 +1,11 @@
 """Concept 1: what DDP does during backward — broadcast, buckets, overlap, no_sync.
 
 Run (CPU / gloo, MacBook OK):
-    torchrun --nproc_per_node=2 c1_ddp_buckets.py
-    torchrun --nproc_per_node=2 c1_ddp_buckets.py --bucket-cap-mb 1
-    torchrun --nproc_per_node=2 c1_ddp_buckets.py --grad-accum 4
-    torchrun --nproc_per_node=2 c1_ddp_buckets.py --grad-accum 4 --no-sync
-"""
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c1_ddp_buckets.py
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c1_ddp_buckets.py --bucket-cap-mb 1
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c1_ddp_buckets.py --grad-accum 4
+    torchrun --nproc_per_node=2 --master_addr=127.0.0.1 --master_port=29500 c1_ddp_buckets.py --grad-accum 4 --no-sync
+"""  # noqa: E501
 
 from __future__ import annotations
 

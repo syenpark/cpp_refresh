@@ -40,6 +40,18 @@ Controller → Pod → Container → Process
 
 A **Job/Deployment** (controller) manages desired state; a **Pod** is the execution unit, running containers, each a process.
 
+### Resource relationships: everything centers on the Pod
+
+| Kind | What it is | Relationship to Pod | Analogy |
+| ---- | ---------- | ------------------- | ------- |
+| **Pod** | The actual unit of execution | This is the real workload: a Pod runs the process/container | One employee doing the actual work |
+| **Deployment** | A controller that creates and manages Pods | Creates and maintains Pods according to the desired replica count | HR/recruiting manager that hires and supervises employees |
+| **Job** | A workload controller for finite tasks | Creates Pods to run a batch job until completion | Project manager assigning a one-time task |
+| **Namespace** | A logical boundary/folder for objects | Every Pod must live inside a Namespace | A team office or a room in a building |
+| **ResourceQuota** | Namespace-level total budget | Limits the combined resource requests of all Pods in the Namespace | A department's office budget cap |
+| **LimitRange** | Default/min/max resource policy for a Namespace | Fills in missing resource values for Pods; enforces minimum and maximum constraints | Default equipment rules for new employees |
+| **PriorityClass** | A named priority level with an integer value | Pods reference the PriorityClass by name to indicate scheduling priority | VIP tier / priority label |
+
 `--context` selects which Kubernetes cluster/context to use. Once `kind-mle-lab` is the current context, it can be omitted.
 
 <details>

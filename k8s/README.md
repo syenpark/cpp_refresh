@@ -1,6 +1,8 @@
-# Kubernetes Lab — Job vs Deployment
+# Kubernetes Lab — Workloads, Scheduling, and Resource Isolation
 
 Local Kubernetes lab using **kind + Podman** on an M2 MacBook.
+
+The labs follow one question from the view of a shared ML cluster: *why does (or doesn't) my workload end up as a running Pod?* They start with workload types (Job vs Deployment), then move through scheduling (requests, taints) to multi-team resource isolation (namespaces, quotas).
 
 ## Contents
 
@@ -13,6 +15,7 @@ Local Kubernetes lab using **kind + Podman** on an M2 MacBook.
 - [Service Discovery and DNS Lab](#service-discovery-and-dns-lab)
 - [CrashLoopBackOff](#crashloopbackoff)
 - [Resource requests](#resource-requests)
+- [Admission Failure vs Scheduling Failure](#admission-failure-vs-scheduling-failure)
 
 ## Start the Cluster
 
@@ -552,3 +555,123 @@ resource problem?
 taint problem?
 → compare Node taint vs Pod toleration
 ```
+
+---
+
+## Admission Failure vs Scheduling Failure
+
+On a shared ML cluster, each team usually gets its own **Namespace** with a **ResourceQuota**. That adds a check *before* the scheduler, so a workload can be blocked in two different places.
+
+### Namespace and ResourceQuota
+
+- **Namespace** — a named scope (a "room") that objects live in. Every Pod belongs to one. Without `-n`, `kubectl` uses `default`.
+- **ResourceQuota** — a budget for one namespace: the **sum** of `requests` across all its Pods (plus object counts) may not exceed `hard`.
+
+```text
+Namespace team-a
+├── ResourceQuota team-a-quota   (requests.cpu ≤ 1, requests.memory ≤ 1Gi, pods ≤ 4)
+├── Pod p1  requests.cpu=600m    ← counted against the quota
+└── Pod p2  requests.cpu=600m    ← would make the sum 1200m > 1 → rejected
+```
+
+### Lab
+
+Create the namespace and its quota:
+
+```bash
+kubectl create namespace team-a
+kubectl create quota team-a-quota -n team-a \
+  --hard=requests.cpu=1,requests.memory=1Gi,pods=4
+kubectl describe quota -n team-a
+```
+
+Generate a Pod and add requests (once a quota sets `requests.cpu`/`requests.memory`, every Pod in the namespace must declare them, unless a LimitRange fills in defaults — next lab):
+
+```bash
+kubectl run p1 -n team-a --image=busybox:1.36 --restart=Never \
+  --dry-run=client -o yaml -- sleep 600 > quota-pod.yaml
+```
+
+```yaml
+    resources:
+      requests:
+        cpu: 600m
+        memory: 64Mi
+```
+
+Apply `p1`, then the same spec as `p2`:
+
+```bash
+kubectl apply -f quota-pod.yaml
+kubectl describe quota -n team-a
+
+sed 's/name: p1/name: p2/' quota-pod.yaml | kubectl apply -f -
+kubectl get pods -n team-a
+```
+
+### Observed
+
+Creating anything in a namespace that does not exist:
+
+```text
+Error from server (NotFound): error when creating "pod.yaml": namespaces "team-a" not found
+```
+
+Creating `p2` past the quota:
+
+```text
+Error from server (Forbidden): error when creating "STDIN": pods "p2" is forbidden:
+exceeded quota: team-a-quota, requested: requests.cpu=600m,
+used: requests.cpu=600m, limited: requests.cpu=1
+```
+
+Reading the message: `requested` (600m) + `used` (600m) = 1200m > `limited` (1). `p2` never appears in `kubectl get pods` — the API server refused to create it.
+
+Compare with [Resource requests](#resource-requests): `impossible-request` passed admission (no quota in `default`), was created, and stayed `Pending` because no node could fit it.
+
+### Mental model
+
+```text
+kubectl apply
+      ↓
+API server — admission
+  - does the namespace exist?
+  - does the ResourceQuota still have room?
+      ↓ no → Forbidden / NotFound
+      ↓        Pod object is NEVER created
+      ↓ yes
+Pod created (no node yet)
+      ↓
+Scheduler — placement
+  - requests vs node allocatable, taints/tolerations
+      ↓ no → Pod exists but stays Pending (FailedScheduling)
+      ↓ yes
+kubelet starts the container → Running
+```
+
+| | Admission failure | Scheduling failure |
+| --- | --- | --- |
+| Question | *Is this team allowed to use it?* (policy) | *Is there physically room?* (capacity) |
+| Decided by | API server (ResourceQuota admission) | kube-scheduler |
+| Pod object | Never created | Exists, `Pending` |
+| Where to look | Controller events, then `kubectl describe quota` | `kubectl describe pod` → `FailedScheduling` |
+
+The two are independent: a team can have quota left while every node is full (Pending), or an empty cluster can still reject a team that spent its budget (Forbidden).
+
+### Troubleshooting a missing Pod
+
+When a Job or Deployment creates the Pod, the error lands on the **controller**, not on a Pod:
+
+```text
+Job running, but no Pod exists
+        ↓
+kubectl describe job <job> -n <ns>        (or the Deployment's ReplicaSet)
+        ↓
+Events: FailedCreate ... exceeded quota
+        ↓
+kubectl describe quota -n <ns>            → compare Used vs Hard
+```
+
+So: **Pending → scheduler / node side. No Pod at all → admission / quota side.**
+
+For an ML platform, this is how GPU budgets per research team are enforced — for example `requests.nvidia.com/gpu: "8"` in a team's ResourceQuota caps that team at 8 GPUs regardless of how many are free in the cluster.

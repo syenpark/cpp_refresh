@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: p1
+  name: p1
+  namespace: team-a
+spec:
+  containers:
+  - args:
+    - sleep
+    - "600"
+    image: busybox:1.36
+    name: p1
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "600m"
+  dnsPolicy: ClusterFirst
+  restartPolicy: Never
+status: {}

@@ -1,0 +1,11 @@
+# 03-limitrange.yaml
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: team-a-defaults
+  namespace: team-a
+spec:
+  limits:
+  - type: Container
+    defaultRequest: {cpu: 100m, memory: 64Mi}
+    default: {cpu: 200m, memory: 128Mi}

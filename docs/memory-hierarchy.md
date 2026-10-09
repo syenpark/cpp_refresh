@@ -1,4 +1,4 @@
-# The Memory Hierarchy
+# Memory Hierarchy & Allocators
 
 Where instructions, data, and caches live — the "battlefield" you're optimizing against.
 
@@ -9,19 +9,19 @@ Where instructions, data, and caches live — the "battlefield" you're optimizin
                     │  ┌──────── Core 0 ────────┐  │  Core: Executes instructions
                     │  │ Registers (R0..Rn)     │  │    Register: Fastest storage
                     │  │ L1 Cache (32KB)        │  │              Instructions operate
-                    │  └────────────────────────┘  │    L1 Cache: Hot variables should live here
+                    │  └────────────────────────┘  │    L1 Cache: Hot variables live here (~1 ns)
                     │                              │
                     │  ┌──────── Core 1 ────────┐  │
                     │  │ Registers (R0..Rn)     │  │
                     │  │ L1 Cache (32KB)        │  │
                     │  └────────────────────────┘  │
                     │                              │
-                    │        Shared L2 Cache       │  L2 Cache: Bigger and slower than L1
+                    │        Shared L2 Cache       │  L2 Cache: bigger/slower than L1 (~4 ns)
                     │          (per-core / small)  │
                     │                              │
                     │  ┌────────────────────────┐  │
-                    │  │        L3 Cache        │  │  L3 Cache: Shared across cores
-                    │  │   (Shared, MBs)        │  │            Bigger and slower than L2
+                    │  │        L3 Cache        │  │  L3 Cache: shared across cores,
+                    │  │   (Shared, MBs)        │  │            bigger/slower than L2 (~10–15 ns)
                     │  └────────────────────────┘  │
                     └──────────────┬───────────────┘
                                    │
@@ -63,4 +63,34 @@ Instruction →
                         miss → RAM (NUMA remote)
 ```
 
-See also [docs/jargon.md](./jargon.md) for a glossary of cache-miss, false-sharing, NUMA, and allocator terms.
+One RAM access costs hundreds of CPU instructions, so a cache miss hurts far
+more than an extra copy would.
+
+## Allocators
+
+An allocator answers two questions: *where do I get memory?* and *how fast
+and predictable is it?*
+
+Default allocators (`malloc`, `new`) are thread-safe (locked), general-purpose,
+and optimized for average throughput rather than tail latency — which shows
+up as lock contention, heap fragmentation, unpredictable pauses, and
+cache-unfriendly reuse.
+
+## Cache lines
+
+A cache line is ~64 bytes; the CPU loads the whole line, not one variable. A
+poorly laid-out struct pulls in useless data, evicts useful data, and makes
+latency explode:
+
+```cpp
+struct Bad {               struct Good {
+    bool flag;                 double price;
+    double price;              bool flag;
+    bool active;               bool active;
+};                          };
+```
+
+Group hot data together.
+
+See also [docs/jargon.md](./jargon.md) for a glossary of cache-miss,
+false-sharing, NUMA, and allocator terms.

@@ -24,4 +24,4 @@ COPY dist/*.whl /tmp/wheels/
 RUN pip install --no-cache-dir /tmp/wheels/*.whl \
     && rm -rf /tmp/wheels
 
-CMD ["train"]
+CMD ["torchrun", "--standalone", "--nproc-per-node=2", "-m", "training.dataloader_benchmark"]

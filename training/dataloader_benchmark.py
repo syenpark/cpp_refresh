@@ -11,6 +11,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
+from torch.utils.data.distributed import DistributedSampler
 
 from py.utils.custom_logging import SetLogger
 
@@ -51,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--work", type=int, default=100)
     parser.add_argument("--epochs", type=int, default=2)
     parser.add_argument("--before-backward", type=int, default=0)
+    parser.add_argument("--no-sampler", action="store_true")
     return parser.parse_args()
 
 
@@ -70,11 +72,23 @@ def main() -> None:
         work=args.work,
     )
 
+    sampler: DistributedSampler[SyntheticDataset] | None = (
+        None
+        if args.no_sampler
+        else DistributedSampler(
+            dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=False,
+        )
+    )
+
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         shuffle=False,
+        sampler=sampler,
     )
 
     model = DistributedDataParallel(torch.nn.Linear(1, 1))
@@ -95,8 +109,16 @@ def main() -> None:
 
     total_samples = 0
 
-    for _ in range(args.epochs):
-        for x, y in loader:
+    for epoch in range(args.epochs):
+        if sampler is not None:
+            sampler.set_epoch(epoch)
+        for step, (x, y) in enumerate(loader):
+            if epoch == 0 and step == 0:
+                logger.info(
+                    "rank=%s first batch x[:3]=%s",
+                    rank,
+                    x[:3].flatten().tolist(),
+                )
             optimizer.zero_grad()
 
             prediction = model(x)
@@ -108,6 +130,7 @@ def main() -> None:
             total_samples += x.size(0)
 
     dist.barrier()
+    logger.info("rank=%s total_samples=%s", rank, total_samples)
 
     elapsed = time.perf_counter() - start
 

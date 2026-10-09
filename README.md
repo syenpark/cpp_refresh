@@ -80,7 +80,7 @@ Run the PyTorch DDP training image with two processes:
 podman run --rm -it \
     --network host \
     ghcr.io/syenpark/pytorch-ddp:latest \
-    torchrun --standalone --nproc-per-node=2 -m training.train
+    torchrun --standalone --nproc-per-node=2 -m training.dataloader_benchmark
 ```
 
 ## Create the Linux Systems Lab Cluster on Mac M2
@@ -123,7 +123,7 @@ The DDP example needs a process group, so run it locally through `torchrun`
 (set the process count with `--nproc-per-node`):
 
 ```bash
-uv run torchrun --standalone --nproc-per-node=2 -m training.train
+uv run torchrun --standalone --nproc-per-node=2 -m training.dataloader_benchmark
 ```
 
 Run the M2 GPU timing example:

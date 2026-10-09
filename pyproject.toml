@@ -13,9 +13,6 @@ dependencies = [
     "typer>=0.21.1",
 ]
 
-[project.scripts]
-train = "training.train:main"
-
 [project.urls]
 Repository = "https://github.com/syenpark/cpp_refresh"
 

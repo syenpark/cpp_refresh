@@ -4,7 +4,7 @@ PyTorch distributed-training and GPU timing experiments.
 
 ## Contents
 
-- [DDP Smoke Test](#ddp-smoke-test)
+- [Without vs With DistributedSampler](#without-vs-with-distributedsampler)
 - [DataLoader / CPU Contention Lab](#dataloader--cpu-contention-lab)
 - [DDP Straggler Lab](#ddp-straggler-lab)
 - [One Training Iteration: CPU → GPU → DDP](#one-training-iteration-cpu--gpu--ddp)
@@ -13,7 +13,6 @@ PyTorch distributed-training and GPU timing experiments.
 - [Training Performance Troubleshooting Map](#training-performance-troubleshooting-map)
 - [Observe CPU Pressure](#observe-cpu-pressure)
 - [GPU Timing and Profiling](#gpu-timing-and-profiling)
-- [DistributedSampler Demo](#distributedsampler-demo)
 - [Environment](#environment)
 - [ddp_buckets for DDP concept](#ddp_buckets-for-ddp-concept)
 
@@ -23,40 +22,74 @@ PyTorch distributed-training and GPU timing experiments.
 training/
 ├── __init__.py
 ├── Containerfile
-├── train.py
 ├── dataloader_benchmark.py
 ├── dataloader_benchmark_straggler.py
-├── distributed_sampler_demo.py
 ├── gpu_inference_timing.py
 ├── gpu_inference_profiling.py
 └── README.md
 ```
 
-## DDP Smoke Test
+## Without vs With DistributedSampler
 
-Run inside Podman [./train.py](./train.py):
+*Does skipping `DistributedSampler` mean every rank just re-processes the
+same data?*
+
+[./dataloader_benchmark.py](./dataloader_benchmark.py) answers this, and
+along the way doubles as the DDP smoke test: starting it already requires
+`torchrun`, rank/world size, process groups, Gloo, and an AllReduce-style
+`dist.barrier()`/`dist.reduce()` to all work.
+
+### Step 1 — start the process group
 
 ```bash
-podman run --rm -it \
-  ghcr.io/syenpark/pytorch-ddp:latest \
-  torchrun \
-    --standalone \
-    --nproc-per-node=2 \
-    -m training.train
+uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 \
+  -m training.dataloader_benchmark --no-sampler
 ```
 
-Here:
+* `--nproc-per-node=2` starts two training processes (ranks 0 and 1) on this
+  machine.
+* each rank calls `dist.init_process_group(backend="gloo")`, gets a `rank`
+  and `world_size`, and only then is DDP "live".
 
-* `--standalone` runs the distributed job on one server/node and configures worker coordination automatically.
-* `--nproc-per-node=2` starts two training processes on that node.
+This alone proves *"can multiple PyTorch processes communicate correctly?"* —
+regardless of what the `DataLoader` does next.
 
-Validates:
+### Step 2 — without `DistributedSampler` (`--no-sampler`)
 
-* `torchrun`
-* rank / world size
-* process groups
-* Gloo
-* AllReduce
+With no sampler, `DataLoader` has no way to know a rank only owns part of the
+dataset, so every rank iterates all of it from index 0:
+
+```text
+rank=0 first batch x[:3]=[...]
+rank=1 first batch x[:3]=[...]   ← identical to rank 0
+rank=0 total_samples=<dataset-size>
+rank=1 total_samples=<dataset-size>   ← same as rank 0, not split
+```
+
+Both ranks log the *same* first-batch values and the *same* `total_samples`
+— each rank redundantly trained on the whole dataset.
+
+### Step 3 — with `DistributedSampler` (the default, no flag needed)
+
+```bash
+uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 \
+  -m training.dataloader_benchmark
+```
+
+`DistributedSampler(dataset, num_replicas=world_size, rank=rank)` hands each
+rank a disjoint slice of indices, and `sampler.set_epoch(epoch)` re-shuffles
+that slice per epoch:
+
+```text
+rank=0 first batch x[:3]=[...]   ← differs from rank 1
+rank=1 first batch x[:3]=[...]
+rank=0 total_samples=<dataset-size / world-size>
+rank=1 total_samples=<dataset-size / world-size>   ← together, the full dataset
+```
+
+The two ranks now log *different* first-batch values, and each `total_samples`
+is roughly `1/world_size` of the full dataset — together the ranks cover it
+exactly once.
 
 <details>
 <summary>torchrun / process-group diagram</summary>
@@ -78,9 +111,22 @@ torchrun
 ```
 </details>
 
-It proves:
+Mental model:
 
-*"Can multiple PyTorch processes communicate correctly?"*
+```text
+without DistributedSampler            with DistributedSampler
+rank 0 → full dataset, index 0..N     rank 0 → shard A (disjoint slice)
+rank 1 → full dataset, index 0..N     rank 1 → shard B (disjoint slice)
+   (duplicate work, same data)           (each sample seen once per epoch)
+```
+
+So what:
+
+* without a sampler, DDP does not crash and gradients still average fine —
+  the bug is silent duplicated work, not a visible failure
+* `DistributedSampler` + `sampler.set_epoch(epoch)` is what actually turns
+  "N ranks" into "N-way data parallelism"; skipping either one quietly turns
+  a distributed job back into N redundant copies of a single-process job
 
 ## DataLoader / CPU Contention Lab
 
@@ -794,21 +840,6 @@ output = model(batch_gpu)    # GPU compute
 ```
 
 [Colab Tensorboard GPU profiling example](https://colab.research.google.com/drive/1zIQs4xS_cmJJhHvyKpmmPW6xXtTXgH5Y#scrollTo=iCT4ynRMDmuF)
-
-## DistributedSampler Demo
-
-Run with four distributed worker processes:
-
-```bash
-podman run --rm -it \
-  ghcr.io/syenpark/pytorch-ddp:latest \
-  torchrun \
-    --standalone \
-    --nproc-per-node=4 \
-    -m training.distributed_sampler_demo
-```
-
-The demo creates a dataset containing 16 samples and uses `DistributedSampler` to give each worker a different subset. With four workers, each rank receives four samples.
 
 ## Environment
 

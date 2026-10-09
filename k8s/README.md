@@ -35,8 +35,6 @@ kubectl get pods       # Execution state
 kubectl get pods -w    # Watch Pod state changes
 ```
 
-Mental model:
-
 ```text
 Controller → Pod → Container → Process
 ```
@@ -62,114 +60,52 @@ A **Job/Deployment** (controller) manages desired state; a **Pod** is the execut
 
 ### Scheduler
 
-The Kubernetes scheduler is the control-plane component that decides which node a Pending Pod should run on.
+The scheduler is the control-plane component that decides which node a Pending Pod runs on:
 
 ```text
-Job / Deployment creates a Pod
-              ↓
-        Pod has no node
-              ↓
-          Scheduler
-              ↓
-    evaluates each node:
-    - CPU/memory requests
-    - GPU requests
-    - taints/tolerations
-    - other placement constraints
-              ↓
-      suitable node exists?
-         ↙           ↘
-       yes            no
-        ↓              ↓
- assign Pod        Pod stays Pending
- to node           FailedScheduling
+Job/Deployment creates a Pod → Pod has no node → Scheduler evaluates each node:
+    taint without a matching toleration?  → rejected
+    insufficient CPU / memory / GPU?       → rejected
+    other placement constraints unmet?     → rejected
+    all satisfied?                         → assign Pod to node
+no node qualifies → Pod stays Pending (FailedScheduling)
 ```
 
 #### Pod vs Node: what to inspect
 
-For scheduling problems, separate the **Pod side** from the **Node side**.
-
 ```text
 POD                              NODE
-
 Demand                           Supply
-- CPU request                    - CPU allocatable
-- memory request                 - memory allocatable
-- GPU request                    - GPU allocatable
-
+- CPU / memory / GPU request     - CPU / memory / GPU allocatable
 Permission                       Restriction
 - tolerations                    - taints
 ```
 
-Useful commands:
-
 ```bash
-# Why was the Pod not scheduled?
-kubectl describe pod <pod>
-
-# What does the Pod request / tolerate?
-kubectl get pod <pod> -o yaml
-
-# What can the Node provide / what restrictions does it have?
-kubectl describe node <node>
-
-# Raw Node object if exact fields are needed
-kubectl get node <node> -o yaml
+kubectl describe pod <pod>        # why was the Pod not scheduled?
+kubectl get pod <pod> -o yaml     # what does the Pod request/tolerate?
+kubectl describe node <node>      # what can the Node provide/restrict?
 ```
 
 #### `taint` and `toleration`
 
 ```text
 NODE                              POD
-
 🔒 taint                           🔑 toleration
 workload=reserved:NoSchedule      workload=reserved:NoSchedule
-        │                                  │
         └────────── matches ───────────────┘
-
                     ↓
-
        This taint does NOT block this Pod
 ```
 
-Node has `taint` — "do not schedule Pods onto me unless they tolerate this":
+A **taint** on a node says "do not schedule Pods onto me unless they tolerate this"; a **toleration** on a Pod says "I am allowed through this specific block". **Taint blocks. Toleration unblocks that specific taint — it removes the barrier, but does not schedule the Pod by itself**; CPU/memory/GPU fit is still checked afterward.
 
 ```bash
-# Define the taint on the node
 kubectl taint node <node> workload=reserved:NoSchedule
-# Inspect
 kubectl describe node <node>
 ```
 
-Pod has `toleration` — "I am allowed through this specific block".
-
-The sequence is
-
-```text
-Scheduler evaluates node
-        ↓
-Taint exists?
-        ↓
-Matching toleration?
-   ↙             ↘
- no              yes
- ↓                ↓
-node rejected    taint barrier removed
-                  ↓
-          check GPU/CPU/memory/etc.
-                  ↓
-         all requirements satisfied?
-             ↙             ↘
-           yes              no
-            ↓                ↓
-      may be selected      node rejected
-```
-
-**Taint blocks. Toleration unblocks that specific taint — it removes the barrier, but does not schedule the Pod by itself.**
-
 #### Resource failure vs taint failure
-
-For example,
 
 ```bash
 0/4 nodes are available:
@@ -177,29 +113,10 @@ For example,
 2 node(s) had untolerated taint {workload: reserved}
 ```
 
-These are two different reasons for rejecting nodes:
-
 ```text
-2 nodes:
-Pod asks for GPU
-      ↓
-not enough schedulable GPU on node
-      ↓
-Insufficient nvidia.com/gpu
-
-
-Other 2 nodes:
-Node has workload=reserved taint
-      ↓
-Pod lacks matching toleration
-      ↓
-untolerated taint
+2 nodes: Pod asks for GPU → not enough schedulable GPU → Insufficient nvidia.com/gpu  (resource-fit failure)
+2 nodes: node has workload=reserved taint, Pod lacks toleration → untolerated taint   (scheduling-policy failure)
 ```
-
-So:
-
-Insufficient nvidia.com/gpu = resource-fit failure
-untolerated taint = scheduling-policy failure
 
 Neither means the training application started and then failed.
 
@@ -237,13 +154,7 @@ kubectl get jobs
 kubectl get pods -w
 ```
 
-Expected:
-
-```text
-Running → Completed
-```
-
-A successful process exits `0`, satisfying the Job's completion requirement.
+Expected: `Running → Completed`. A successful process exits `0`, satisfying the Job's completion requirement.
 
 ---
 
@@ -264,11 +175,9 @@ Amend the container:
 ```yaml
 spec:
   replicas: 1
-
   template:
     spec:
       restartPolicy: Always
-
       containers:
         - name: busybox
           image: busybox:1.36
@@ -289,17 +198,7 @@ kubectl get deployments
 kubectl get pods -w
 ```
 
-Observed behavior:
-
-```text
-Running
-→ Completed
-→ restarted
-→ Running
-→ Completed
-→ CrashLoopBackOff
-→ restarted...
-```
+Observed: `Running → Completed → restarted → Running → Completed → CrashLoopBackOff → restarted...`
 
 The process exits successfully, but the Deployment expects a continuously running replica.
 
@@ -308,31 +207,17 @@ The process exits successfully, but the Deployment expects a continuously runnin
 ## Job vs Deployment
 
 ```text
-Job
-finite process exits 0
-→ completion satisfied
-→ no restart
-
-Deployment
-finite process exits 0
-→ restartPolicy: Always
-→ container restarted
-→ repeated termination
-→ restart backoff
+Job:         finite process exits 0 → completion satisfied → no restart
+Deployment:  finite process exits 0 → restartPolicy: Always → restarted → repeated termination → backoff
 ```
 
-Use a **Job** for finite workloads such as training/batch processing.
-
-Use a **Deployment** for continuously running workloads such as inference services.
+Use a **Job** for finite workloads such as training/batch processing. Use a **Deployment** for continuously running workloads such as inference services.
 
 ---
 
 ## Job Running vs Pod Running
 
-**Pod Running** = the process is alive (kubelet's view).
-**Job Running** = the controller has not yet observed completion (Job controller's view).
-
-Three layers of truth:
+**Pod Running** = the process is alive (kubelet's view). **Job Running** = the controller has not yet observed completion (Job controller's view).
 
 ```text
 Scheduler      Can the Pod be placed?     → Pending / Scheduled
@@ -355,77 +240,49 @@ Mental model: Kubernetes may report everything healthy while the ML workload is 
 
 ## Service Discovery and DNS Lab
 
-For ML systems, inference Pods are disposable workers: their Pod IPs can change after a restart or rollout. A **Service** gives clients a stable endpoint, while a **Deployment** keeps the desired inference Pods running.
+Inference Pods are disposable: their IPs change after a restart or rollout. A **Service** gives clients a stable endpoint; a **Deployment** keeps the desired inference Pods running.
 
 ```text
-client Pod
-    ↓ http://inference-service:80
-Service (stable ClusterIP)
-    ↓
-EndpointSlice (current Ready Pod IPs)
-    |-- inference Pod A
-    `-- inference Pod B
+client Pod → http://inference-service:80 → Service (stable ClusterIP)
+    → EndpointSlice (current Ready Pod IPs) → inference Pod A / B
 ```
 
 <details>
 <summary>Hands-on: create, test, and debug Service discovery</summary>
 
-Create two backend Pods and expose them through a Service:
+Create two backend Pods, expose them, and confirm the Service tracks their IPs:
 
 ```bash
-kubectl create deployment inference \
-  --image=nginx:alpine \
-  --replicas=2
-
-kubectl expose deployment inference \
-  --name=inference-service \
-  --port=80 \
-  --target-port=80
+kubectl create deployment inference --image=nginx:alpine --replicas=2
+kubectl expose deployment inference --name=inference-service --port=80 --target-port=80
 
 kubectl get service inference-service
 kubectl get endpointslice -l kubernetes.io/service-name=inference-service
 ```
 
-`kubectl expose` creates a Service; it does not expose Pod IPs directly or create Pods. Kubernetes matches the Service selector to ready Pod labels, then records the matching Pod IPs in EndpointSlices.
+`kubectl expose` creates a Service; it does not create Pods. Kubernetes matches the Service selector to ready Pod labels and records their IPs in EndpointSlices.
 
-Test discovery from a temporary client:
+Test discovery from a temporary client, then delete a backend Pod and confirm the client is unaffected:
 
 ```bash
-kubectl run client \
-  --image=busybox:1.36 \
-  --restart=Never \
-  --command -- sleep 3600
-
-kubectl exec client -- nslookup inference-service
+kubectl run client --image=busybox:1.36 --restart=Never --command -- sleep 3600
+kubectl exec client -- nslookup inference-service    # resolves to the Service's ClusterIP, not a Pod IP
 kubectl exec client -- wget -qO- http://inference-service
-```
 
-`nslookup inference-service` resolves to the Service's stable `ClusterIP`, **not** a backend Pod IP. Service routing then selects a current EndpointSlice address.
-
-Delete one backend Pod and compare the Pod IPs with the endpoints:
-
-```bash
-kubectl get pods -o wide
-kubectl delete pod <inference-pod>
-kubectl get pods -w
+kubectl delete pod <inference-pod>                   # Deployment replaces it, likely with a new IP
 kubectl get endpointslice -l kubernetes.io/service-name=inference-service
-kubectl exec client -- wget -qO- http://inference-service
+kubectl exec client -- wget -qO- http://inference-service   # unchanged — client never saw the IP change
 ```
 
-The Deployment replaces the deleted Pod, potentially with a new IP. The EndpointSlice updates, but the client continues using `http://inference-service` unchanged.
-
-When a Service exists but has no endpoints, trace the request path:
+When a Service has no endpoints, trace the request path and inspect selector vs labels:
 
 ```text
-Client -> DNS -> Service -> selector -> EndpointSlice -> backend Pods
+Client → DNS → Service → selector → EndpointSlice → backend Pods
 ```
 
-The most likely cause is that the Service selector does not match ready Pod labels. Inspect the selector, Pod labels, readiness, and EndpointSlices:
-
 ```bash
-kubectl get service inference-service -o yaml
-kubectl get pods --show-labels
-kubectl get endpointslice -l kubernetes.io/service-name=inference-service
+kubectl get service inference-service -o yaml     # selector
+kubectl get pods --show-labels                    # do Pod labels actually match it?
 ```
 
 </details>
@@ -434,57 +291,23 @@ kubectl get endpointslice -l kubernetes.io/service-name=inference-service
 
 ## CrashLoopBackOff
 
-`CrashLoopBackOff` does **not necessarily mean the application crashed**.
-
-It means the container repeatedly terminates after Kubernetes restarts it, so Kubernetes applies increasing delay before subsequent restart attempts.
-
-To determine **why the process terminated**:
+`CrashLoopBackOff` does **not necessarily mean the application crashed** — it means the container repeatedly terminates after Kubernetes restarts it, so Kubernetes applies increasing delay before the next attempt.
 
 ```bash
-kubectl describe pod <pod-name>
+kubectl describe pod <pod-name>     # check Last State: Terminated
+kubectl logs <pod-name> --previous  # the previous container's logs
 ```
 
-Check `Last State: Terminated`:
-
-Successful termination:
-
-```text
-Reason:     Completed
-Exit Code:  0
-```
-
-Application failure:
-
-```text
-Reason:     Error
-Exit Code:  1
-```
-
-Example OOM termination:
-
-```text
-Reason:     OOMKilled
-Exit Code:  137
-```
-
-Also inspect the previous container's logs:
-
-```bash
-kubectl logs <pod-name> --previous
-```
-
-Troubleshooting mental model:
+| Reason | Exit Code | Meaning |
+| --- | --- | --- |
+| `Completed` | 0 | successful termination |
+| `Error` | 1 | application failure |
+| `OOMKilled` | 137 | killed for exceeding memory |
 
 ```text
 CrashLoopBackOff = "container keeps terminating" ≠ "application definitely crashed"
-        ↓
-Why did the previous process terminate?
-        ↓
-kubectl describe pod
-        +
-kubectl logs --previous
-        ↓
-Reason + Exit Code + logs
+    ↓
+kubectl describe pod + kubectl logs --previous → Reason + Exit Code + logs
 ```
 
 ## Resource requests
@@ -496,7 +319,7 @@ kubectl run impossible-request \
   --dry-run=client -o yaml > resource-demo.yaml
 ```
 
-Then, amend [./resource-demo.yaml](./resource-demo.yaml) with a resources block the node can't satisfy:
+Amend [./resource-demo.yaml](./resource-demo.yaml) with a resources block the node can't satisfy:
 
 ```yaml
 spec:
@@ -513,59 +336,36 @@ spec:
           memory: "4Gi"
 ```
 
-`requests` are what the scheduler uses to decide placement; `limits` are what the kubelet enforces at runtime. Setting both equal gives guaranteed, QoS-level CPU. Applying the amended manifest will leave the pod `Pending`. Then:
+`requests` are what the scheduler uses for placement; `limits` are what the kubelet enforces at runtime — setting both equal gives guaranteed QoS.
 
-### CPU overcommit vs GPU allocation
-
-CPU can be overcommitted: the scheduler places Pods using their CPU `requests`, while the total CPU `limits` may exceed the node's capacity. CPU is time-shareable, so workloads compete when demand is high.
-
-GPUs are normally not overcommitted. A device plugin advertises discrete extended resources such as `nvidia.com/gpu: 1`, and the scheduler will not allocate the same GPU to another Pod. GPU requests generally must equal limits. GPU time-slicing, MIG, or vGPU can enable sharing, but those require explicit device-plugin support.
+* CPU can be overcommitted: the scheduler places Pods by `requests`, but summed `limits` may exceed node capacity, since CPU is time-shareable.
+* GPUs normally cannot: a device plugin advertises discrete resources like `nvidia.com/gpu: 1`, and the scheduler never double-allocates one — requests must equal limits unless time-slicing/MIG/vGPU is explicitly configured.
 
 ```bash
 kubectl apply -f resource-demo.yaml
-kubectl get pods
 kubectl describe pod impossible-request
 ```
 
-Then,
-
-```bash
-Events:
-  Type     Reason            Age   From               Message
-  ----     ------            ----  ----               -------
-  Warning  FailedScheduling  13s   default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+```text
+Warning  FailedScheduling  0/1 nodes are available: 1 Insufficient cpu.
 ```
 
-### Useful troubleshooting commands
-
-Use the same Pod-vs-Node inspection as in [the Scheduler section](#pod-vs-node-what-to-inspect): `kubectl describe pod` (Events → `FailedScheduling`), `kubectl get pod -o yaml` (requests/tolerations), `kubectl describe node` (allocatables/taints).
-
-The mental model is:
+Use the same [Pod-vs-Node inspection](#pod-vs-node-what-to-inspect) as the Scheduler section above to read it:
 
 ```text
-Pod Pending
-    ↓
-kubectl describe pod
-    ↓
-read FailedScheduling reason
-    ↓
-resource problem?
-→ compare Pod requests vs Node allocatable
-
-taint problem?
-→ compare Node taint vs Pod toleration
+Pod Pending → kubectl describe pod → read FailedScheduling reason
+   resource problem? → compare Pod requests vs Node allocatable
+   taint problem?    → compare Node taint vs Pod toleration
 ```
 
 ---
 
 ## Admission Failure vs Scheduling Failure
 
-On a shared ML cluster, each team usually gets its own **Namespace** with a **ResourceQuota**. That adds a check *before* the scheduler, so a workload can be blocked in two different places.
+On a shared ML cluster, each team usually gets its own **Namespace** with a **ResourceQuota** — a check *before* the scheduler, so a workload can be blocked in two different places.
 
-### Namespace and ResourceQuota
-
-- **Namespace** — a named scope (a "room") that objects live in. Every Pod belongs to one. Without `-n`, `kubectl` uses `default`.
-- **ResourceQuota** — a budget for one namespace: the **sum** of `requests` across all its Pods (plus object counts) may not exceed `hard`.
+* **Namespace** — a named scope every Pod belongs to. Without `-n`, `kubectl` uses `default`.
+* **ResourceQuota** — a budget for one namespace: the **sum** of `requests` across all its Pods (plus object counts) may not exceed `hard`.
 
 ```text
 Namespace team-a
@@ -576,8 +376,6 @@ Namespace team-a
 
 ### Lab
 
-Create the namespace and its quota:
-
 ```bash
 kubectl create namespace team-a
 kubectl create quota team-a-quota -n team-a \
@@ -585,7 +383,7 @@ kubectl create quota team-a-quota -n team-a \
 kubectl describe quota -n team-a
 ```
 
-Generate a Pod and add requests (once a quota sets `requests.cpu`/`requests.memory`, every Pod in the namespace must declare them, unless a LimitRange fills in defaults — next lab):
+Generate a Pod with requests (once a quota sets `requests.cpu`/`requests.memory`, every Pod in the namespace must declare them, unless a LimitRange fills in defaults):
 
 ```bash
 kubectl run p1 -n team-a --image=busybox:1.36 --restart=Never \
@@ -603,49 +401,35 @@ Apply `p1`, then the same spec as `p2`:
 
 ```bash
 kubectl apply -f quota-pod.yaml
-kubectl describe quota -n team-a
-
 sed 's/name: p1/name: p2/' quota-pod.yaml | kubectl apply -f -
 kubectl get pods -n team-a
 ```
 
 ### Observed
 
-Creating anything in a namespace that does not exist:
-
 ```text
 Error from server (NotFound): error when creating "pod.yaml": namespaces "team-a" not found
-```
 
-Creating `p2` past the quota:
-
-```text
 Error from server (Forbidden): error when creating "STDIN": pods "p2" is forbidden:
 exceeded quota: team-a-quota, requested: requests.cpu=600m,
 used: requests.cpu=600m, limited: requests.cpu=1
 ```
 
-Reading the message: `requested` (600m) + `used` (600m) = 1200m > `limited` (1). `p2` never appears in `kubectl get pods` — the API server refused to create it.
-
-Compare with [Resource requests](#resource-requests): `impossible-request` passed admission (no quota in `default`), was created, and stayed `Pending` because no node could fit it.
+`requested` (600m) + `used` (600m) = 1200m > `limited` (1). `p2` never appears in `kubectl get pods` — the API server refused to create it. Compare with [Resource requests](#resource-requests): `impossible-request` passed admission (no quota in `default`), was created, and stayed `Pending` because no node could fit it.
 
 ### Mental model
 
 ```text
 kubectl apply
-      ↓
-API server — admission
-  - does the namespace exist?
-  - does the ResourceQuota still have room?
-      ↓ no → Forbidden / NotFound
-      ↓        Pod object is NEVER created
-      ↓ yes
+    ↓
+API server — admission: does the namespace exist? does the quota have room?
+    ↓ no  → Forbidden / NotFound — Pod object is NEVER created
+    ↓ yes
 Pod created (no node yet)
-      ↓
-Scheduler — placement
-  - requests vs node allocatable, taints/tolerations
-      ↓ no → Pod exists but stays Pending (FailedScheduling)
-      ↓ yes
+    ↓
+Scheduler — placement: requests vs node allocatable, taints/tolerations
+    ↓ no  → Pod exists but stays Pending (FailedScheduling)
+    ↓ yes
 kubelet starts the container → Running
 ```
 
@@ -654,24 +438,8 @@ kubelet starts the container → Running
 | Question | *Is this team allowed to use it?* (policy) | *Is there physically room?* (capacity) |
 | Decided by | API server (ResourceQuota admission) | kube-scheduler |
 | Pod object | Never created | Exists, `Pending` |
-| Where to look | Controller events, then `kubectl describe quota` | `kubectl describe pod` → `FailedScheduling` |
+| Where to look | `kubectl describe job/deployment` → `FailedCreate`, then `kubectl describe quota` | `kubectl describe pod` → `FailedScheduling` |
 
-The two are independent: a team can have quota left while every node is full (Pending), or an empty cluster can still reject a team that spent its budget (Forbidden).
+The two are independent: a team can have quota left while every node is full (Pending), or an empty cluster can still reject a team that spent its budget (Forbidden). When a Job/Deployment creates the Pod, note that a quota rejection lands on the **controller** (`FailedCreate`), not on a Pod — there is no Pod to `describe`.
 
-### Troubleshooting a missing Pod
-
-When a Job or Deployment creates the Pod, the error lands on the **controller**, not on a Pod:
-
-```text
-Job running, but no Pod exists
-        ↓
-kubectl describe job <job> -n <ns>        (or the Deployment's ReplicaSet)
-        ↓
-Events: FailedCreate ... exceeded quota
-        ↓
-kubectl describe quota -n <ns>            → compare Used vs Hard
-```
-
-So: **Pending → scheduler / node side. No Pod at all → admission / quota side.**
-
-For an ML platform, this is how GPU budgets per research team are enforced — for example `requests.nvidia.com/gpu: "8"` in a team's ResourceQuota caps that team at 8 GPUs regardless of how many are free in the cluster.
+For an ML platform, this is how GPU budgets per research team are enforced — e.g. `requests.nvidia.com/gpu: "8"` in a team's ResourceQuota caps that team at 8 GPUs regardless of how many are free in the cluster.

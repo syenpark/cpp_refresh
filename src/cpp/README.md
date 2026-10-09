@@ -1,139 +1,78 @@
-# C++ Analytics Bootstrap (Config + Tooling, ZeroMQ)
+# C++ Lab
 
-This repository is a **C++ bootstrap for a low-latency analytics container**.
+Progressive C++ ownership/concurrency topics (`day01` → `week04`/`lab`), plus
+a small low-latency analytics bootstrap project.
 
-The project intentionally starts small and explicit, focusing on:
+## Topics
 
-- build system correctness
-- dependency wiring
-- configuration loading
-- process-level I/O (ZeroMQ)
+Run each command from inside its directory (`cd day01`, `cd week02`, …).
 
-before introducing any analytics hot paths.
+| Dir | File | Concept | Build & run |
+| --- | --- | --- | --- |
+| day01 | `lifetime.cpp` | object lifetime — when exactly the destructor runs | `clang++ -std=c++20 -O1 -g -fsanitize=address lifetime.cpp -o lifetime_asan && ./lifetime_asan` |
+| day02 | `reference_vs_copy.cpp` | reference vs copy — when a copy actually happens | `clang++ -std=c++20 -O1 -g -fsanitize=address reference_vs_copy.cpp -o reference_vs_copy_asan && ./reference_vs_copy_asan` |
+| day03 | `move.cpp` | move semantics — vector buffer transfer vs copy | `clang++ -std=c++20 -O1 -fsanitize=address move.cpp -o move_asan && ./move_asan` |
+| day04 | `api.cpp` | vector growth (`reserve`/`emplace_back`), iterator invalidation, ownership patterns (`const&` / `&` / value / `&&`) | `clang++ -std=c++20 -O1 -fsanitize=address api.cpp -o api_asan && ./api_asan` |
+| day06 | `numa.cpp` | placeholder — not yet implemented | — |
+| day07 | `automic.cpp` | atomic counter: `fetch_add` is atomic, but interleaved `cout` isn't | `clang++ -std=c++20 -O1 -fsanitize=address automic.cpp -o automic_asan && ./automic_asan` |
+| day07 | `mutex.cpp` | same counter, mutex-protected (compare against `automic.cpp`) | `clang++ -std=c++20 -O1 -fsanitize=address mutex.cpp -o mutex_asan && ./mutex_asan` |
+| week02 | `spsc.cpp` | SPSC lock-free ring buffer, cache-line-padded head/tail | `g++ -O3 -std=c++17 -pthread spsc.cpp && ./a.out` |
+| week03 | `treiber.cpp` | Treiber stack — basic lock-free push/pop via CAS | `clang++ -std=c++17 -O0 -pthread treiber.cpp -o treiber && ./treiber` |
+| week03 | `treiber_tagged.cpp` | Treiber stack — tagged-pointer CAS to detect ABA on the head | `g++ -std=c++17 -O2 -pthread treiber_tagged.cpp -o treiber_tagged && ./treiber_tagged` |
+| week03 | `treiber_hazard.cpp` | Treiber stack — hazard pointers for safe reclamation (fixes use-after-free) | `g++ -std=c++17 -O2 -pthread treiber_hazard.cpp -o treiber_hazard && ./treiber_hazard` |
+| week04 | `vector_vs_string.cpp` | `vector<char>` vs `std::string` allocation/append cost | `g++ -std=c++17 -O2 -pthread vector_vs_string.cpp -o vector_vs_string && ./vector_vs_string` |
+| lab | `producer_consumer.cpp` | producer-consumer via mutex + condition_variable (also linked into the `analytics` binary below) | `g++ -std=c++17 -O2 -pthread producer_consumer.cpp -o producer_consumer && ./producer_consumer` |
 
----
+### Atomic (spin) vs Mutex (block) — day07
 
-## Contents
+```text
+Thread B waiting on Thread A:
 
-- [Current Scope](#current-scope)
-- [Project Structure](#project-structure)
-- [Dependencies](#dependencies)
-- [Installing Dependencies](#installing-dependencies)
-- [config.toml](#configtoml)
-- [Build](#build)
-- [Run](#run)
-- [Current Behavior](#current-behavior)
-- [Measurement Notes (Python vs C++)](#measurement-notes-python-vs-c)
-- [Tooling](#tooling)
-- [Design Notes](#design-notes)
-- [Next Steps](#next-steps)
+atomic spin:  while (!flag.load()) {}     → uses CPU, no context switch
+mutex block:  lock.lock()                 → no CPU, OS wakes it later
+```
 
----
+* spinning avoids context-switch latency but burns CPU — good for short,
+  fast-resolving waits (counters, flags)
+* blocking frees the CPU but pays a wake-up/context-switch cost — better for
+  larger critical sections
 
-## Current Scope
+## Analytics Bootstrap
 
-As of now, this repository provides:
-
-- ✅ C++ project skeleton with **CMake**
-- ✅ `config.toml` parsing via **toml++**
-- ✅ argv-based config path handling
-- ✅ clang-format / cpplint / cppcheck wired via **pre-commit**
-- ✅ **ZeroMQ** installed and linked (libzmq + cppzmq)
-- ✅ JSON parsing via **RapidJSON** (consumer-side decode)
-- ✅ Optional compile-time metrics (`ENABLE_METRICS`)
-- ❌ No analytics hot loop yet (beyond decode + iteration)
-- ❌ No threading / polling / performance tuning yet
-
-The goal is to build this incrementally toward a **low-latency analytics engine**, without hiding system complexity.
-
----
-
-## Project Structure
+A C++ bootstrap for a low-latency analytics container: build system, config
+loading, and process-level I/O (ZeroMQ) wired up before any analytics hot
+path is added.
 
 ```text
 cpp_refresh/
 ├── CMakeLists.txt
 ├── config.toml
 ├── external/
-│   ├── tomlplusplus/           # git submodule (header-only)
-│   ├── cppzmq/                 # git submodule (header-only)
-│   └── rapidjson/              # git submodule (header-only)
+│   ├── tomlplusplus/   # git submodule (header-only)
+│   ├── cppzmq/         # git submodule (header-only)
+│   └── rapidjson/      # git submodule (header-only)
 ├── src/cpp/
-│   ├── common/                 # config parsing
-│   │   ├── config.h
-│   │   └── config.cpp
-│   ├── analytics/
-│   │   └── main.cpp
-│   ├── lab/
-│   │   └── producer_consumer.cpp
-│   └── include/rapidjson.hpp   # convenience wrapper
-├── .pre-commit-config.yaml
-└── README.md
+│   ├── common/         # config parsing (config.h / config.cpp)
+│   ├── analytics/      # main.cpp
+│   ├── lab/            # producer_consumer.cpp (see Topics above)
+│   └── include/rapidjson.hpp
+└── .pre-commit-config.yaml
 ```
 
----
-
-## Dependencies
-
-### Required
-
-- **CMake ≥ 3.16**
-- **C++17 compiler** (clang or gcc)
-- **git** (for submodules)
-- **ZeroMQ** (libzmq)
-
-### Optional (recommended)
-
-- clang-format
-- cpplint
-- cppcheck
-- pre-commit
-
----
-
-## Installing Dependencies
-
-### toml++
-
-This project uses toml++ (header-only).
+Dependencies: CMake ≥ 3.16, a C++17 compiler, git (for submodules), and
+ZeroMQ (libzmq, linked via `pkg-config`; cppzmq and RapidJSON are vendored
+as header-only submodules).
 
 ```bash
+brew install zeromq pkg-config    # macOS
+
 git submodule add https://github.com/marzer/tomlplusplus external/tomlplusplus
-git submodule update --init --recursive
-```
-
-### ZeroMQ
-
-ZeroMQ consists of:
-
-- **libzmq** (C core, system library)
-- **cppzmq** (C++ header-only wrapper)
-
-```bash
-# macOS (Homebrew)
-brew install zeromq
-brew install pkg-config
-
 git submodule add https://github.com/zeromq/cppzmq external/cppzmq
-git submodule update --init --recursive
-```
-
-### RapidJSON
-
-```bash
 git submodule add https://github.com/Tencent/rapidjson external/rapidjson
 git submodule update --init --recursive
 ```
 
-> [!note]
-> `libzmq` is treated as a system dependency and linked via `pkg-config`.
-> `cppzmq` and `rapidjson` are vendored as header-only submodules.
-
----
-
-## config.toml
-
-Example:
+`config.toml`:
 
 ```toml
 [stream]
@@ -156,102 +95,35 @@ port = 5555
 rcvhwm = 1000
 ```
 
----
-
-## Build
-
-From the repository root:
+Build and run from the repository root:
 
 ```bash
-mkdir -p build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_METRICS=ON
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_METRICS=ON   # -DENABLE_METRICS=OFF to compile out instrumentation
 cmake --build build -j
-```
-
-### Disable metrics (compile out instrumentation)
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_METRICS=OFF
-cmake --build build -j
-```
-
----
-
-## Run
-
-From the repository root:
-
-```bash
 ./build/analytics config.toml
 ```
 
----
+Current behavior: parses `config.toml` into a typed `Config` struct, connects
+a ZeroMQ SUB socket, receives multipart `(topic, payload)` messages, decodes
+the JSON payload (RapidJSON) and iterates per-source/per-detection, and
+optionally prints a lightweight FPS when built with `ENABLE_METRICS`. This
+repo currently focuses on I/O + decode plumbing — analytics logic comes
+later.
 
-## Current Behavior
+Measured under the same input stream: the C++ consumer uses roughly an
+order of magnitude less resident memory than an equivalent Python consumer,
+and shows lower per-frame CPU cost. Since the pipeline is input-bounded,
+FPS alone isn't the metric that matters — CPU cost per frame and memory
+headroom under producer pressure are.
 
-- Parses `config.toml`
-- Loads into typed `Config` struct
-- Connects a ZeroMQ SUB socket
-- Receives multipart messages: `(topic, payload)`
-- Parses JSON payload (RapidJSON) and iterates per-source and per-detection
-- Optional: prints lightweight FPS when built with metrics enabled
-
-**Important:** This repo currently focuses on *I/O + decode* plumbing. Analytics logic comes later.
-
----
-
-## Measurement Notes (Python vs C++)
-
-This repo has been used to compare **Python vs C++ analytics consumers** under the *same input stream*.
-
-Key observation so far:
-
-- **RSS (resident memory)**
-  - Python consumer: ~30 MB (example: ~30544 KB)
-  - C++ consumer: ~2–3 MB (example: ~2432 KB)
-
-- **CPU (input-limited ~60 FPS)**
-  - Both appear low in absolute % because the pipeline is input-bounded.
-  - Python still shows higher per-frame CPU cost and less headroom.
-
-Because the pipeline can be input-bounded, **FPS alone is not the primary metric**.
-What matters more for scaling is:
-
-- CPU cost per frame
-- memory footprint stability
-- headroom under increased producer pressure
-
----
-
-## Tooling
-
-Install hooks:
+Tooling:
 
 ```bash
-pip install pre-commit
-pre-commit install
-```
-
-Run manually:
-
-```bash
+pip install pre-commit && pre-commit install
 pre-commit run --all-files
 ```
 
----
-
-## Design Notes
-
-- Config parsed once at startup
-- No hot-path string lookups for config access (struct-based config)
-- Metrics instrumentation is compile-time removable (`ENABLE_METRICS`)
-- System dependencies (libzmq) stay explicit (not hidden behind a framework)
-
----
-
-## Next Steps
-
-1. Decode JSON directly into POD structs (avoid dynamic field access in hot paths)
-2. Add minimal analytics hot loop (single camera / single ROI)
-3. Add controlled load generator (publisher) to push throughput
-4. Then: multi-source, ROI fan-out, threading experiments
+Design notes: config is parsed once at startup (struct-based, no hot-path
+string lookups); metrics instrumentation is compile-time removable
+(`ENABLE_METRICS`); system dependencies like libzmq stay explicit rather
+than hidden behind a framework.

@@ -123,7 +123,7 @@ The DDP example needs a process group, so run it locally through `torchrun`
 (set the process count with `--nproc-per-node`):
 
 ```bash
-uv run torchrun --standalone --nproc-per-node=2 -m training.dataloader_benchmark
+uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 -m training.dataloader_benchmark
 ```
 
 Run the M2 GPU timing example:

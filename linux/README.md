@@ -60,65 +60,25 @@ NO
 ```
 
 Linux uses TASK_RUNNING for both currently running and runnable tasks.
-
 `vmstat r` therefore reflects running/runnable CPU demand, while `vmstat b`
 counts tasks in uninterruptible sleep (D state).
 
 <details>
-<summary>Runnable vs D state</summary>
+<summary>Blocking, spinning, mutex/atomic, SPSC, condition variables</summary>
 
-**Runnable**
+**Runnable vs D state** — Runnable means "I can run now; I only need CPU
+time" (normal computation, a preempted CPU-bound thread, a spinning thread).
+D means "giving me CPU would not help yet; I am waiting for a kernel
+operation" (storage I/O, NFS, other kernel-level waits). D does not mean
+"all blocked threads" — it is one specific Linux task state.
 
-"I can run now; I only need CPU time."
+**Blocking** is a general programming term — the thread cannot make
+progress until some condition, event, or resource changes. A blocked
+thread is commonly in S state (mutex wait, condition-variable wait,
+sleep/poll/select) or D state (storage/uninterruptible kernel wait). So
+`blocked ≠ D state`; `vmstat b` only counts the D-state subset.
 
-Typical causes:
-
-- normal computation
-- a preempted CPU-bound thread
-- a spinning thread waiting for a condition
-
-**D state**
-
-"Giving me CPU would not help yet; I am waiting for a kernel operation to complete."
-
-Common causes:
-
-- storage I/O
-- NFS / some filesystem operations
-- other kernel-level waits
-
-D does not mean "all blocked threads." It is one specific Linux task state.
-
-</details>
-
-### Blocking is not a Linux task state
-
-"Blocked" is a general programming term meaning:
-
-the thread cannot make progress until some condition, event, or resource changes.
-
-A blocked thread may commonly be:
-
-```text
-S state
-→ mutex wait
-→ condition variable wait
-→ sleep / poll / select
-
-D state
-→ storage or other uninterruptible kernel wait
-```
-
-So:
-
-```text
-blocked ≠ D state
-vmstat b ≈ D-state tasks
-```
-
-### Spinning
-
-Spinning describes behaviour, not a separate scheduler state:
+**Spinning** describes behaviour, not a separate scheduler state:
 
 ```cpp
 while (!ready.load()) {
@@ -126,143 +86,63 @@ while (!ready.load()) {
 }
 ```
 
-The thread remains eligible to run:
+The thread stays eligible to run (`scheduled on CPU → Running`,
+`preempted → Runnable`) — it does not sleep, so it can consume CPU
+continuously.
 
-```text
-scheduled on CPU → Running
-preempted        → Runnable
-```
+**Mutex** — if uncontended: `Running → acquire lock → continue`, often
+entirely in user space, no context switch. If contended, a typical
+blocking mutex does `Running → sleep → wake → Runnable → Running`.
 
-It does not sleep while spinning, so it can consume CPU continuously.
+**Atomic** (e.g. `counter.fetch_add(1)`) is usually a short operation while
+Running. Atomicity alone does not imply spinning, sleeping, blocking, or a
+particular context-switch behaviour — the surrounding algorithm decides
+that. `while (!flag.load()) {}` is atomic *and* spinning; a blocking API
+such as `atomic::wait()` can instead sleep while waiting.
 
-<details>
-<summary>Mutex, atomic, and waiting</summary>
+**SPSC queue** (one producer, one consumer) does not require a lock-free
+implementation: `SPSC + mutex` is valid and simple, but contention may
+block; `SPSC + lock-free atomics` avoids mutex ownership contention and
+usually the blocking path, reducing latency/jitter — but lock-free does
+not automatically mean "no waiting": an empty queue may still spin, return
+immediately, or fall back to a separate blocking mechanism.
 
-mutex and atomic are synchronization mechanisms, not task states.
-
-**Mutex**
-
-If uncontended:
-
-```text
-Running
-→ acquire lock
-→ continue
-```
-
-If contended, a typical blocking mutex may:
-
-```text
-Running
-→ wait / sleep
-→ wake
-→ Runnable
-→ Running
-```
-
-A mutex does not necessarily cause a context switch; the uncontended fast path
-may complete entirely in user space.
-
-**Atomic operation**
+**Condition variable** lets a thread wait without spinning:
 
 ```cpp
-counter.fetch_add(1);
+cv.wait(lock, predicate);
 ```
 
-Usually performs a short atomic operation while the thread is Running.
-
-Atomicity itself does not mean:
-
-- spinning
-- sleeping
-- blocking
-- no context switching
-
-The surrounding algorithm decides the waiting behaviour.
-
-For example:
-
-```cpp
-while (!flag.load()) {}
+```text
+queue empty → consumer blocks → producer adds item → notify → consumer runnable
 ```
-
-is atomic + spinning.
-
-A blocking API such as `atomic::wait()` can instead sleep while waiting.
 
 </details>
-
-### SPSC queue mental model
-
-SPSC means:
-
-- one producer
-- one consumer
-
-It does not require lock-free implementation.
-
-```text
-SPSC + mutex
-→ valid and simple
-→ contention may block
-
-SPSC + lock-free atomics
-→ avoids mutex ownership contention
-→ usually avoids the blocking lock path
-→ can reduce latency/jitter
-```
-
-Lock-free does not automatically mean "no context switches" or "no waiting."
-For example, an empty queue may be handled by spinning, returning immediately,
-or a separate blocking mechanism.
 
 ### Quick mental map
 
 ```text
-Running
-→ executing now
-
-Runnable
-→ CPU-ready, waiting for CPU
-
-S
-→ interruptible sleep
-
-D
-→ uninterruptible sleep
-→ counted by vmstat b
-
-Spinning
-→ behaviour while Running/Runnable
-→ consumes CPU
-
-Blocking
-→ general programming concept
-→ commonly S or D
-
-Mutex
-→ protects a critical section
-
-Atomic
-→ provides atomic operations / synchronization semantics
+Running    → executing now
+Runnable   → CPU-ready, waiting for CPU
+S          → interruptible sleep
+D          → uninterruptible sleep → counted by vmstat b
+Spinning   → behaviour while Running/Runnable, consumes CPU
+Blocking   → general programming concept, commonly S or D
+Mutex      → protects a critical section
+Atomic     → atomic operations / synchronization semantics
 ```
 
 ## CPU pressure
 
 CPU utilisation and CPU saturation are not interchangeable.
 
-On a machine with eight logical CPUs:
-
 ```text
-us + sy = 20%, r = 2
-→ substantial CPU headroom
-
-us + sy = 95%, id = 5%, r = 14
-→ sustained CPU contention is likely
+us + sy = 20%, r = 2                    → substantial CPU headroom
+us + sy = 95%, id = 5%, r = 14 (8 cores) → sustained CPU contention is likely
 ```
 
-Do not conclude CPU contention from one `r` value. Look for sustained runnable
-pressure together with low idle time.
+Do not conclude CPU contention from one `r` value. Look for sustained
+runnable pressure together with low idle time.
 
 ### Example: r=12 on 8 cores
 
@@ -281,9 +161,9 @@ ps -eo pid,ppid,stat,comm,%cpu --sort=-%cpu   → which process?
 top -H -p <PID>  or  pidstat -u -t -p <PID> 1 → which thread?
 ```
 
-If CPU usage is spread evenly across threads, still ask whether it is expected
-computation or excessive spinning/contention — 8 threads × 100% CPU can be
-either healthy parallel work or threads spinning on a lock.
+If CPU usage is spread evenly across threads, still ask whether it is
+expected computation or excessive spinning/contention — 8 threads × 100%
+CPU can be either healthy parallel work or threads spinning on a lock.
 
 <details>
 <summary>Why does the parent process show 0% CPU?</summary>
@@ -300,38 +180,15 @@ stress (235)   STAT S+   %CPU  0.0   ← forks, then waits
 
 The parent sits in `wait()`, so it consumes almost no CPU. Each process
 accounts for its own CPU time; **PPID means "who created me", not "who owns
-my CPU usage"**. A `PPID = 235` does not fold the children's CPU into 235.
-
-Troubleshooting consequence: if you only looked at the parent, you would
-miss the problem. That is why the `ps` snapshot lists every process, and
+my CPU usage"**. If you only looked at the parent, you would miss the
+problem — that is why the `ps` snapshot lists every process, and
 `pstree -p <PID>` shows the hierarchy at a glance.
 
 Note the distinction from threads: here the work is in **child processes**
 (visible in plain `ps`), whereas `top -H` / `pidstat -t` descend into
-**threads within one process**. Both are "child tasks", but they show up in
-different tools.
+**threads within one process**.
 
 </details>
-
-### Condition variable
-
-A condition variable lets a thread wait without spinning:
-
-```cpp
-cv.wait(lock, predicate);
-```
-
-```text
-queue empty
-    ↓
-consumer blocks
-    ↓
-producer adds item
-    ↓
-notify
-    ↓
-consumer becomes runnable
-```
 
 ## I/O diagnosis
 
@@ -365,13 +222,6 @@ is involved:
 | network filesystem | NFS `read()` waiting on remote server | D (possible) |
 | device driver wait | waiting on hardware response | D (possible) |
 
-So the corrected mental model is:
-
-```text
-D = uninterruptible wait for kernel-level operation completion
-    (most common cause: disk/block I/O — not the only one)
-```
-
 Troubleshooting order when you find D-state tasks:
 
 ```text
@@ -388,26 +238,15 @@ Use `vmstat` for a broad system-level view:
 vmstat 1
 ```
 
-A common source of confusion is that `D`, `b`, and `%wa` describe related I/O wait phenomena from different viewpoints:
+`D`, `b`, and `%wa` describe the same I/O-wait phenomenon from three
+different viewpoints — none of them is directly interchangeable with
+another:
 
 ```text
-D    = STATE
-      "What state is this particular process in?"
-
-b    = COUNT
-      "How many tasks are blocked?"
-
-%wa  = CPU TIME
-      "How much CPU idle time occurred while I/O was outstanding?"
+D    (ps, per task)      "what state is this particular process in?"
+b    (vmstat, count)     "how many tasks are currently blocked?"
+%wa  (vmstat, CPU time)  "how much CPU idle time occurred while I/O was outstanding?"
 ```
-
-In other words:
-
-- `D` is a per-task kernel state; you usually observe it with `ps` or `/proc/<pid>/status`.
-- `b` is the aggregate count from `vmstat`: how many tasks are currently in uninterruptible sleep.
-- `%wa` is a system-wide CPU-time signal: how much CPU time was idle because I/O was outstanding.
-
-So `D` is not directly observable in `vmstat`; `vmstat` exposes the aggregate effect (`b`) and the CPU-time view (`%wa`), not the state of one task.
 
 <details>
 <summary><code>vmstat</code> fields</summary>
@@ -432,14 +271,9 @@ So `D` is not directly observable in `vmstat`; `vmstat` exposes the aggregate ef
 Useful first-pass interpretations:
 
 ```text
-r high + id low
-→ CPU pressure
-
-b high + wa high
-→ investigate blocked I/O
-
-cs very high
-→ investigate further; high context-switch rate alone is not a root cause
+r high + id low   → CPU pressure
+b high + wa high  → investigate blocked I/O
+cs very high      → investigate further; high rate alone is not a root cause
 ```
 
 `vmstat` provides system-level evidence. It does not identify the responsible
@@ -450,11 +284,8 @@ application thread.
 Use `iostat` when the evidence points toward storage:
 
 ```bash
-iostat -xz 1
+iostat -xz 1   # -x extended stats, -z omit idle devices
 ```
-
-- `-x` = extended device statistics
-- `-z` = omit devices with no activity in the interval
 
 <details>
 <summary><code>iostat</code> fields</summary>
@@ -470,73 +301,48 @@ iostat -xz 1
 
 </details>
 
-`aqu-sz` is a **device I/O queue**, not a CPU scheduler queue. It can contain
-both reads and writes.
-
-`vmstat b` and `iostat aqu-sz` do not need to match:
-
-```text
-b
-→ number of blocked Linux tasks
-
-aqu-sz
-→ number of outstanding requests for this block device
-```
-
-The relationship is not 1:1. One task can issue multiple asynchronous I/O
-requests, and multiple tasks can also wait on shared work or other resources.
+`aqu-sz` is a **device I/O queue**, not a CPU scheduler queue, and it does
+not need to match `vmstat b`: one task can issue multiple asynchronous I/O
+requests, and multiple tasks can also wait on shared work or other
+resources — the relationship is not 1:1.
 
 High `await`, queue depth, and device utilisation together strengthen the
-storage bottleneck hypothesis. A high `wa` value alone is a reason to
+storage-bottleneck hypothesis. A high `wa` value alone is a reason to
 investigate, not proof of root cause.
 
-The first device table can represent activity accumulated over a longer period,
-while later tables represent the requested interval. If a device is absent
-from a later table when `-z` is used, it usually means there was no qualifying
-activity during that interval.
-
 ### Synthetic I/O results
-
-A command such as:
 
 ```bash
 dd if=/dev/zero of=/tmp/io-test.bin bs=4M count=512 conv=fdatasync
 ```
 
-measures one synthetic sequential workload in one environment. It does not
-predict random I/O, fsync-heavy workloads, network storage, database access, or
-production throughput.
+This measures one synthetic sequential workload in one environment — it does
+not predict random I/O, fsync-heavy workloads, network storage, database
+access, or production throughput.
 
 ## Memory diagnosis
 
 ### `free`
 
-Use `free -h` for a quick memory overview:
-
 ```bash
 free -h
 ```
 
-Columns that matter:
-
-- `used` — memory in use
-- `buff/cache` — kernel buffers and page cache; reclaimable, not "leaked"
-- `available` — estimated free memory for new applications without swapping
-
-A small `free` value next to a large `buff/cache` value is normal: Linux uses
-spare memory for the page cache. `available` is the better signal than `free`
-for "can this host take more work?"
+Columns that matter: `used` (memory in use), `buff/cache` (kernel buffers +
+page cache — reclaimable, not "leaked"), `available` (estimated free memory
+for new applications without swapping). A small `free` value next to a
+large `buff/cache` value is normal — Linux uses spare memory for the page
+cache. `available` is the better "can this host take more work?" signal.
 
 ### Swap
 
-`vmstat` reports swap movement with the `si`/`so` fields in the table above —
-pages moving between RAM and disk per second. Swap activity is a symptom, not a
-root cause: the memory pressure behind it still needs an explanation.
+`vmstat`'s `si`/`so` fields report swap movement — pages moving between
+RAM and disk per second. Swap activity is a symptom, not a root cause: the
+memory pressure behind it still needs an explanation.
 
 ### OOM
 
-When the kernel cannot reclaim enough memory, it kills a process. Check the
-kernel log:
+When the kernel cannot reclaim enough memory, it kills a process:
 
 ```bash
 dmesg | grep -i -E 'out of memory|killed process|oom'
@@ -546,97 +352,59 @@ The log names the killed process(es) and how much memory was available.
 
 ### PSI — pressure stall information
 
-The kernel exposes pressure metrics per resource:
-
 ```bash
 cat /proc/pressure/cpu
 cat /proc/pressure/memory
 cat /proc/pressure/io
 ```
 
-Each file reports `some` and `full` averages over 10s, 60s, and 300s windows.
-`some avg10=0.10` means 10% of the last 10 seconds had at least one task
-stalled on that resource. `full` close to `some` means the whole machine is
-waiting; `full` much lower than `some` means only a few tasks are stalled. PSI
-catches memory stalls that are not yet visible as swap or OOM.
+Each file reports `some` and `full` averages over 10s, 60s, and 300s
+windows. `some avg10=0.10` means 10% of the last 10 seconds had at least one
+task stalled on that resource. `full` close to `some` means the whole
+machine is waiting; `full` much lower than `some` means only a few tasks are
+stalled. PSI catches memory stalls that are not yet visible as swap or OOM.
 
 ## Network diagnosis
 
 For Linux troubleshooting, this simplified network stack is enough:
 
 ```text
-Application
-docker / curl / Kafka / PyTorch
-        |
-        v
-TCP or UDP          how application data is transported
-        |
-        v
-IP                  where packets are going
-        |
-        v
-Network interface   where packets enter/leave this host
-eth0 / lo / veth
-        |
-        v
+Application   docker / curl / Kafka / PyTorch
+      ↓
+TCP or UDP    how application data is transported
+      ↓
+IP            where packets are going
+      ↓
+Interface     where packets enter/leave this host (eth0 / lo / veth)
+      ↓
 Network path / remote host
 ```
 
 ### Network interface
 
-A network interface is the Linux kernel's network endpoint for sending and
-receiving packets.
-
-Common examples:
-
-- `eth0` — physical or VM-facing network interface
-- `lo` — loopback / localhost
-- `veth*` — virtual interface, commonly used by containers
-- `cni-podman0` — Podman network bridge
-
-Inspect interfaces and their IP addresses:
+Common examples: `eth0` (physical/VM-facing), `lo` (loopback), `veth*`
+(virtual, commonly used by containers), `cni-podman0` (Podman bridge).
 
 ```bash
-ip addr
-```
-
-Inspect routing:
-
-```bash
-ip route
+ip addr     # interfaces and their IP addresses
+ip route    # routing
 ```
 
 ### IP vs TCP vs UDP
 
-**IP**
-- provides addressing and routing
-- answers: **where should the packet go?**
+* **IP** — addressing and routing; answers *where should the packet go?*
+* **TCP** — connection-oriented, ordered/reliable delivery via ACKs and
+  retransmission; answers *how is this reliable connection behaving?*
+* **UDP** — datagram transport, no delivery/ordering/retransmission
+  guarantee; useful where timeliness and low overhead matter
 
-**TCP**
-- connection-oriented transport over IP
-- provides ordered, reliable delivery using ACKs and retransmission
-- answers: **how is this reliable connection behaving?**
-
-**UDP**
-- datagram transport over IP
-- no built-in delivery, ordering, or retransmission guarantee
-- useful for workloads where timeliness and low overhead matter
-
-TCP and UDP both operate over IP:
-
-```text
-TCP ─┐
-     ├── over IP
-UDP ─┘
-```
+Both TCP and UDP operate over IP.
 
 ### `sar` — interface level
 
 ```bash
 sar -n DEV 1
 ```
-
-Useful fields:
 
 <details>
 <summary><code>sar -n DEV</code> fields</summary>
@@ -649,23 +417,14 @@ Useful fields:
 
 </details>
 
-Question answered:
-
-> Is the network interface carrying traffic or close to saturation?
-
-Example:
+Question answered: *is the network interface carrying traffic or close to
+saturation?*
 
 ```text
-eth0 rx ≈ 2.5 MB/s
-eth0 tx ≈ 40 KB/s
-%ifutil ≈ 0.1%
+eth0 rx ≈ 2.5 MB/s, tx ≈ 40 KB/s, %ifutil ≈ 0.1%
+→ inbound traffic exists, but the interface itself is far from saturated
+→ this does NOT prove the end-to-end network path is healthy
 ```
-
-Interpretation:
-
-- inbound network traffic exists
-- the interface itself is far from saturated
-- this does **not** prove the end-to-end network path is healthy
 
 ### `ss` — TCP connection level
 
@@ -673,89 +432,50 @@ Interpretation:
 ss -ti
 ```
 
-Use `ss` to inspect TCP connections and TCP-level behaviour such as:
-
-- connection state
-- RTT
-- retransmission information
-- congestion/window behaviour
-
-Question answered:
-
-> Is this TCP connection itself showing signs of delay or loss?
+Use `ss` to inspect connection state, RTT, retransmission information, and
+congestion/window behaviour. Question answered: *is this TCP connection
+itself showing signs of delay or loss?*
 
 ### Example: slow `docker pull`
 
 ```text
 docker pull slow
-        |
-        v
-vmstat
-r low, id high
-→ CPU contention unlikely
-        |
-        v
-iostat
-await low, aqu-sz low, %util low
-→ local storage saturation unlikely
-        |
-        v
-sar -n DEV
-RX traffic exists, %ifutil low
-→ downloading, but NIC is not saturated
-        |
-        v
-ss -ti
-→ inspect the TCP connection
+      ↓
+vmstat        r low, id high            → CPU contention unlikely
+      ↓
+iostat        await/aqu-sz/%util low    → local storage saturation unlikely
+      ↓
+sar -n DEV    RX traffic exists, %ifutil low  → downloading, NIC not saturated
+      ↓
+ss -ti        → inspect the TCP connection itself
 ```
 
-Low `%ifutil` does not mean "the network is healthy." A download can still be
-slow because of:
-
-- high RTT
-- packet loss / retransmissions
-- congestion elsewhere on the path
-- remote server or registry throttling
-
-Mental model:
-
-```text
-sar = interface-level traffic and capacity
-ss  = TCP connection-level behaviour
-IP  = addressing and routing
-TCP/UDP = transport behaviour
-interface = packet entry/exit point on this host
-```
+Low `%ifutil` does not mean "the network is healthy" — a download can still
+be slow because of high RTT, packet loss/retransmissions, congestion
+elsewhere on the path, or remote server/registry throttling.
 
 ## Process and thread tools
 
 ### `top`
-
-Interactive, continuously changing view:
 
 ```bash
 top
 top -H -p <PID>
 ```
 
-Use it to see current CPU and memory usage, and whether a process's CPU is
-distributed across threads or dominated by one thread.
+Current CPU/memory usage, and whether a process's CPU is distributed across
+threads or dominated by one thread.
 
 ### `ps`
-
-Snapshot and process inventory:
 
 ```bash
 ps -ef
 ps -eo pid,ppid,stat,comm,%cpu --sort=-%cpu
 ```
 
-Use it for process hierarchy, task state, command identity, and a snapshot of
-CPU usage.
+Process hierarchy, task state, command identity, and a CPU-usage snapshot.
 
 ### `pidstat`
-
-Per-process and per-thread measurements over an interval:
 
 ```bash
 pidstat -u 1
@@ -763,50 +483,34 @@ pidstat -u -t -p <PID> 1
 pidstat -w -t -p <PID> 1
 ```
 
-`%CPU` is CPU time consumed during the interval. `CPU` is the logical CPU on
-which the task was sampled or accounted. A task can move between logical CPUs.
+`%CPU` is CPU time consumed during the interval; `CPU` is the logical CPU
+the task was sampled/accounted on — a task can move between logical CPUs.
+For context switching: `cswch/s` (voluntary) vs `nvcswch/s` (involuntary).
+High values alone do not prove a problem — interpret with runnable
+pressure, CPU utilisation, latency, and workload behaviour.
 
-For context switching:
-
-- `cswch/s` = voluntary context switches per second
-- `nvcswch/s` = involuntary context switches per second
-
-High values alone do not prove a problem. Interpret them with runnable pressure,
-CPU utilisation, latency, and workload behaviour.
-
-Also in the lab image and worth having on hand:
-
-- `htop` — interactive `top` with per-thread and tree views
-- `pstree` — process / thread hierarchy as a tree
-- `fuser -v <path-or-port>` — which PID is using a file or network port
-- `ping` — basic reachability; only proves ICMP, not application-layer health
+Also in the lab image and worth having on hand: `htop` (interactive `top`
+with per-thread/tree views), `pstree` (process/thread hierarchy as a tree),
+`fuser -v <path-or-port>` (which PID is using a file or network port),
+`ping` (basic reachability — only proves ICMP, not application-layer
+health).
 
 ## Tracing and file descriptors
 
 ### `strace`
 
-`strace` records the system calls a process makes. Use it when `top -H` and
-`pidstat` have identified the thread but not *why* it is stuck:
+Use when `top -H`/`pidstat` identified the thread but not *why* it is stuck:
 
 ```bash
-strace -f -p <PID>
+strace -f -p <PID>    # -f follow forked children, -p attach to existing process
+strace -c -p <PID>    # per-syscall summary instead of a live stream
 ```
 
-- `-f` — follow forked children
-- `-p` — attach to an existing process
-
-For a per-syscall summary instead of a live stream:
-
-```bash
-strace -c -p <PID>
-```
-
-The summary shows which syscalls dominate, for example repeated `futex`, `poll`,
-or `read` calls. It distinguishes "blocked waiting for a lock" from "blocked on
-a socket receive" from "doing heavy I/O".
-
-Attaching requires permission; in the lab image that is covered by the
-`--cap-add=SYS_PTRACE` flag on the run command in the repository root README.
+The summary shows which syscalls dominate — repeated `futex`, `poll`, or
+`read` distinguishes "blocked on a lock" from "blocked on a socket receive"
+from "doing heavy I/O". Attaching requires permission; in the lab image
+that is covered by `--cap-add=SYS_PTRACE` on the run command in the
+repository root README.
 
 ### `lsof`
 
@@ -814,18 +518,14 @@ Attaching requires permission; in the lab image that is covered by the
 loaded libraries, it shows what a process is holding open:
 
 ```bash
-lsof -p <PID>
-lsof -i :port
-lsof +L1
+lsof -p <PID>      # files opened by one process
+lsof -i :port      # processes using a given TCP/UDP port
+lsof +L1           # open but already-deleted files (link count < 1)
 ```
 
-- `-p` — files opened by one process
-- `-i :port` — processes using a given TCP or UDP port
-- `+L1` — files with a link count below 1, i.e. open but already deleted
-
-Open-but-deleted files are the classic "disk is full but nothing seems to own
-the space" case: a process keeps a deleted file open, so the space is not
-released until that process closes it.
+Open-but-deleted files are the classic "disk is full but nothing seems to
+own the space" case: a process keeps a deleted file open, so the space is
+not released until that process closes it.
 
 ## Troubleshooting workflow
 
@@ -861,33 +561,6 @@ Network suspected
 
 The signals are clues, not proof: confirm the suspected bottleneck with the
 next command in the path and then measure again after mitigation.
-
-```text
-Application is slow
-        |
-        v
-vmstat
-        |
-        +-- r high + id low?
-        |       |
-        |       └── CPU pressure
-        |             ↓
-        |          top / ps
-        |             ↓
-        |          top -H / pidstat
-        |
-        +-- b/wa high?
-        |       |
-        |       └── investigate storage
-        |             ↓
-        |          iostat -xz 1
-        |
-        +-- neither?
-                |
-                └── investigate network,
-                    memory, sync, GPU,
-                    or external dependency
-```
 
 Move from system-level evidence to ownership:
 
@@ -972,38 +645,4 @@ ip addr
 ip route
 sar -n DEV 1
 ss -ti
-```
-
-Remember the progression:
-
-```text
-vmstat
-→ system CPU/task pressure
-
-iostat
-→ storage
-
-free / dmesg / /proc/pressure/memory
-→ memory
-
-sar
-→ network interface
-
-ss
-→ TCP connection
-
-top / ps
-→ process
-
-top -H / pidstat -t
-→ thread
-
-pidstat -w
-→ context switching
-
-strace
-→ which syscall the thread is stuck on
-
-lsof
-→ open files / sockets
 ```

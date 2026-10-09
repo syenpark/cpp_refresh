@@ -92,5 +92,53 @@ struct Bad {               struct Good {
 
 Group hot data together.
 
+## Case study: pointer-chasing breaks cache locality (Python vs C++)
+
+A Python object list is a worked example of everything above going wrong at
+once. Each `obj.bbox` attribute access chases three more pointers (list →
+object → `__dict__` → value), and each hop can land on a different,
+cold cache line:
+
+```text
+# Python: list -> object -> dict -> value, each hop a potential cache miss
+┌────────────────────────────┐
+│ Python List (Array)        │   ← contiguous array of 8-byte pointers
+│ [ ptr_A ][ ptr_B ][ ptr_C ]│
+└────║─────────│─────────│───┘
+     ▼         ▼         ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│  PyObject A  │   │  PyObject B  │   │  PyObject C  │  ← scattered on the heap
+├──────────────┤   └──────────────┘   └──────────────┘    (cache misses)
+│ Ref Count    │
+│ Type Pointer │
+│ __dict__ ptr │──┐
+└──────────────┘  │
+                  ▼
+          ┌──────────────┐
+          │ Instance Dict│  ← hash-table lookup for "bbox" (expensive)
+          │ "bbox" : ptr │──┐
+          └──────────────┘  │
+                            ▼
+                    ┌──────────────┐
+                    │ PyFloat Obj  │  ← the actual data (another heap hop)
+                    │ Value: 12.5  │
+                    └──────────────┘
+
+# C++: one contiguous buffer, direct offset load, no pointer chase
+┌───────────────────────────────────────────┐
+│ std::vector<TrackData> (Contiguous)       │
+│ ┌─────────┐┌─────────┐┌─────────┐         │
+│ │ Track A ││ Track B ││ Track C │         │  ← no pointers, no dicts,
+│ │ [bbox]  ││ [bbox]  ││ [bbox]  │         │    no scattered heap
+│ └─────────┘└─────────┘└─────────┘         │
+└───────────────────────────────────────────┘
+```
+
+A contiguous `std::vector` of POD structs turns that pointer chase into a
+linear scan: fixed memory offsets replace dictionary lookups, the CPU's
+prefetcher can keep the cache fed, and the interpreter dispatch overhead
+disappears entirely — commonly a 10x–100x speedup for metadata-heavy hot
+loops like real-time object-detection post-processing.
+
 See also [docs/jargon.md](./jargon.md) for a glossary of cache-miss,
 false-sharing, NUMA, and allocator terms.

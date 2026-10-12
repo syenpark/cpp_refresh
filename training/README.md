@@ -26,6 +26,14 @@ training/
 
 ### Who does what
 
+| Component | Job | Analogy | In `dataloader_benchmark.py` |
+| --- | --- | --- | --- |
+| Dataset | knows what sample `i` is (`__len__`, `__getitem__(i)`) | warehouse of numbered items | `SyntheticDataset` |
+| Sampler | decides which indices this process takes, and in what order | my share of the order numbers | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
+| DataLoader | fetches those indices from the dataset and groups them into batches | worker who picks items and boxes them | `DataLoader(dataset, ..., sampler=sampler)` |
+| DDP | wraps the model; averages gradients across ranks during `backward()` | meeting where workers reconcile results | `DistributedDataParallel(model)` |
+| torchrun | launches N processes and tells each one its rank | staffing N workers | `--nproc-per-node=4` |
+
 ```text
 torchrun
    │  spawns rank 0..N, sets RANK / WORLD_SIZE / MASTER_ADDR / MASTER_PORT
@@ -41,6 +49,13 @@ Sampler ──indices──▶ Dataset ──(x,y)──▶ DataLoader ──bat
 epoch
  └── step = optimizer.step() on one batch     global_batch = batch_size × world_size
 ```
+
+Only two things happen *between* ranks:
+
+- **Split the data** — the sampler does it. No communication: each rank just
+  computes its indices from its rank number (`r, r+N, r+2N, ...`).
+- **Keep the model in sync** — DDP does it. Communication: all-reduce averages
+  the gradients, so every rank's model stays identical after `optimizer.step()`.
 
 ### Without vs With DistributedSampler
 

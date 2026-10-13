@@ -28,11 +28,11 @@ training/
 
 | Component | Job | Analogy | In `dataloader_benchmark.py` |
 | --- | --- | --- | --- |
-| Dataset | knows what sample `i` is (`__len__`, `__getitem__(i)`) | warehouse of numbered items | `SyntheticDataset` |
+| Dataset | returns ONE sample for index `i` (`__len__`, `__getitem__(i)`), not a batch; `batch_size`, `shuffle`, `sampler`, `num_workers` are DataLoader settings | warehouse of numbered items | `SyntheticDataset` |
 | Sampler | decides which indices this process takes, and in what order | my share of the order numbers | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
 | DataLoader | fetches those indices from the dataset and groups them into batches | worker who picks items and boxes them | `DataLoader(dataset, ..., sampler=sampler)` |
-| DDP | wraps the model; averages gradients across ranks during `backward()` | meeting where workers reconcile results | `DistributedDataParallel(model)` |
-| torchrun | launches N processes and tells each one its rank | staffing N workers | `--nproc-per-node=4` |
+| DDP | wraps the model; averages **gradients** (not weights) across ranks during `backward()`. Weights stay identical because DDP broadcasts rank 0's weights once at construction, then every rank applies the same averaged gradient with the same optimizer | meeting where workers reconcile results | `DistributedDataParallel(model)` |
+| torchrun | a launcher: starts N copies of the same script, sets `RANK` / `WORLD_SIZE` / `MASTER_ADDR` / `MASTER_PORT` so they can find each other (rendezvous), and monitors them. Does NOT split data (sampler), average gradients (DDP), or move the model to the GPU (my code) | staffing N workers | `--nproc-per-node=4` |
 
 ```text
 torchrun
@@ -48,6 +48,11 @@ Sampler ──indices──▶ Dataset ──(x,y)──▶ DataLoader ──bat
 
 epoch
  └── step = optimizer.step() on one batch     global_batch = batch_size × world_size
+
+e.g. 2000 samples, 4 ranks, batch_size=32
+with sampler:    2000 / 4 = 500 per rank → ceil(500/32) = 16 steps per rank per epoch
+without sampler: each rank sees all 2000 → ceil(2000/32) = 63 steps (4× the work, same model)
+global batch = 32 × 4 = 128 samples per optimizer.step()
 ```
 
 Only two things happen *between* ranks:
@@ -79,6 +84,12 @@ uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 \
 │ +ranks       → NO speedup      │   │ +ranks       → ≈linear speedup │
 │ SUM(throughput) → inflated N×  │   │ 4 ranks      → ≈4× faster      │
 └────────────────────────────────┘   └────────────────────────────────┘
+```
+
+```text
+no sampler → every rank gets identical batches (same order: shuffle=False) → identical gradients
+→ average of identical gradients = the same gradient
+→ same model as 1 rank, no speedup; no error is raised
 ```
 
 ```text
@@ -132,6 +143,16 @@ submission, not completion     one arrives                  (see Straggler Lab)
                                                             this lab's dist.reduce(dst=0,
                                                             SUM) is reduce-to-one — only
                                                             rank 0 gets it
+```
+
+### Precision checks
+
+```text
+"DDP averages weights"             → DDP averages GRADIENTS; weights stay equal as a result
+"Dataset returns a batch"          → Dataset returns ONE sample; DataLoader makes batches
+"torchrun splits the data"         → torchrun launches + sets RANK/WORLD_SIZE/MASTER_ADDR/PORT; the sampler splits
+"no sampler → error / wrong model" → no error; same model as 1 rank, just no speedup
+"barrier = all-reduce"             → barrier only waits; all-reduce waits AND combines
 ```
 
 ## Part 2 — Why Training Is Slow

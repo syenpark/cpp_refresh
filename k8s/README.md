@@ -77,7 +77,6 @@ kubectl delete pod web -n k1-demo     # a Pod created directly has no owner → 
 
 So what:
 - Image typo / stuck Pod → `describe` (ErrImagePull, ImagePullBackOff); app crash → `logs`.
-- A namespace alone doesn't limit CPU or choose nodes.
 
 ## Useful `kubectl` Concepts
 

@@ -8,6 +8,7 @@ The labs follow one question from the view of a shared ML cluster: *why does (or
 
 - [Start the Cluster](#start-the-cluster)
 - [Useful `kubectl` Concepts](#useful-kubectl-concepts)
+- [Pod & Namespace](#pod--namespace)
 - [Job Lab](#job-lab)
 - [Deployment Lab](#deployment-lab)
 - [Job vs Deployment](#job-vs-deployment)
@@ -26,6 +27,36 @@ podman start mle-lab-control-plane
 kubectl config use-context kind-mle-lab
 kubectl get nodes
 ```
+
+## Pod & Namespace
+
+*Does a namespace decide where a Pod runs?* No — it's only a name scope.
+
+```bash
+kubectl create namespace k1-demo
+kubectl run web --image=nginx:alpine -n k1-demo
+kubectl run web --image=nginx:alpine                # same name, default namespace
+kubectl get pods -A -o wide | grep web              # NAMESPACE differs, NODE is the same
+```
+
+```text
+cluster
+├── Nodes       (machines, shared by every namespace)
+└── Namespaces  (name scopes, like C++ namespaces)
+a Pod = one namespace + one node — two independent labels
+```
+
+### describe vs logs
+
+```bash
+kubectl describe pod web -n k1-demo   # K8s's view: Events (scheduled, pulled, started, restarts)
+kubectl logs web -n k1-demo           # the app's view: stdout/stderr (--previous after a restart)
+kubectl delete pod web -n k1-demo     # a Pod created directly has no owner → it does not come back
+```
+
+So what:
+- Image typo / stuck Pod → `describe` (ErrImagePull, ImagePullBackOff); app crash → `logs`.
+- A namespace alone doesn't limit CPU or choose nodes.
 
 ## Useful `kubectl` Concepts
 

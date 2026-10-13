@@ -7,8 +7,9 @@ The labs follow one question from the view of a shared ML cluster: *why does (or
 ## Contents
 
 - [Start the Cluster](#start-the-cluster)
-- [Useful `kubectl` Concepts](#useful-kubectl-concepts)
+- [Kind vs Object](#kind-vs-object)
 - [Pod & Namespace](#pod--namespace)
+- [Useful `kubectl` Concepts](#useful-kubectl-concepts)
 - [Job Lab](#job-lab)
 - [Deployment Lab](#deployment-lab)
 - [Job vs Deployment](#job-vs-deployment)
@@ -28,9 +29,29 @@ kubectl config use-context kind-mle-lab
 kubectl get nodes
 ```
 
+## Kind vs Object
+
+*What is an "object" in Kubernetes?* One instance of a **kind**, stored in the cluster (e.g. the Pod named `web`). A **kind** is the type (Pod, Deployment, Job, Namespace, Node…).
+
+```cpp
+class Pod { std::string name, image; };  // kind   = class
+Pod web{"web", "nginx"};                 // object = instance
+```
+
+```text
+apply / create        → make an object
+get / describe        → read it
+delete                → remove it
+pods "web" not found  → that object is gone; the kind Pod still exists
+```
+
+Namespace and Node are objects too, but cluster-wide (they don't belong to any namespace).
+
 ## Pod & Namespace
 
 *Does a namespace decide where a Pod runs?* No — it's only a name scope.
+
+A **namespace** is a logical group of objects for **names**: a name must be unique only inside its namespace (`k1-demo/web` and `default/web` can both exist). It is independent of nodes and, on its own, limits no resources.
 
 ```bash
 kubectl create namespace k1-demo
@@ -70,7 +91,23 @@ kubectl get pods -w    # Watch Pod state changes
 Controller → Pod → Container → Process
 ```
 
-A **Job/Deployment** (controller) manages desired state; a **Pod** is the execution unit, running containers, each a process.
+A **controller** is a loop that compares the desired state (the yaml spec) with the actual state and fixes the gap. A **Pod** is the execution unit, running containers, each a process.
+
+```cpp
+while (true) {
+    int want = spec.replicas, have = count_running_pods();
+    if (have < want) create_pod();
+    if (have > want) delete_pod();
+}
+```
+
+```text
+Deployment ──owns──> Pods   keep N running forever  (servers, e.g. inference)
+Job        ──owns──> Pod    run until success, stop (e.g. a training run)
+bare Pod   (no owner)       deleted = gone          (see Pod & Namespace)
+```
+
+So what: delete 1 Pod of a `replicas: 3` Deployment → the controller sees 2 < 3 and creates a **new** Pod (new name). The deleted one is not revived. Restart behavior: see [Job vs Deployment](#job-vs-deployment).
 
 ### Resource relationships: everything centers on the Pod
 
@@ -79,7 +116,7 @@ A **Job/Deployment** (controller) manages desired state; a **Pod** is the execut
 | **Pod** | The actual unit of execution | This is the real workload: a Pod runs the process/container | One employee doing the actual work |
 | **Deployment** | A controller that creates and manages Pods | Creates and maintains Pods according to the desired replica count | HR/recruiting manager that hires and supervises employees |
 | **Job** | A workload controller for finite tasks | Creates Pods to run a batch job until completion | Project manager assigning a one-time task |
-| **Namespace** | A logical boundary/folder for objects | Every Pod must live inside a Namespace | A team office or a room in a building |
+| **Namespace** | A logical boundary/folder for objects | Every Pod must live inside a Namespace | A C++ namespace: a name scope, not a place |
 | **ResourceQuota** | Namespace-level total budget | Limits the combined resource requests of all Pods in the Namespace | A department's office budget cap |
 | **LimitRange** | Default/min/max resource policy for a Namespace | Fills in missing resource values for Pods; enforces minimum and maximum constraints | Default equipment rules for new employees |
 | **PriorityClass** | A named priority level with an integer value | Pods reference the PriorityClass by name to indicate scheduling priority | VIP tier / priority label |

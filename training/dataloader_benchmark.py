@@ -17,6 +17,8 @@ from py.utils.custom_logging import SetLogger
 
 logger = SetLogger().logger
 
+SLOW_THRESHOLD = 10.0  # ms
+
 
 class SyntheticDataset(Dataset):
     """Synthetic dataset with configurable CPU-heavy preprocessing."""
@@ -107,6 +109,9 @@ def main() -> None:
     dist.barrier()
     start = time.perf_counter()
 
+    step_times: list[float] = []
+    last = time.perf_counter()
+
     total_samples = 0
 
     for epoch in range(args.epochs):
@@ -127,12 +132,35 @@ def main() -> None:
             loss.backward()
             optimizer.step()
 
+            now = time.perf_counter()
+            # includes waiting for the next batch
+            step_times.append(now - last)
+            last = now
+
             total_samples += x.size(0)
 
     dist.barrier()
     logger.info("rank=%s total_samples=%s", rank, total_samples)
 
     elapsed = time.perf_counter() - start
+
+    if rank == 0:
+        ms = [t * 1e3 for t in step_times]
+        rest = sorted(ms[5:])
+        logger.info(
+            "first 3 steps=%s ms | steady median=%.1f ms",
+            [round(t, 1) for t in ms[:3]],
+            rest[len(rest) // 2],
+        )
+        slow = [round(t) for t in ms if t > SLOW_THRESHOLD]
+        logger.info(
+            "steps=%d sum=%.1fs | slow steps (>%.1fms): count=%d first=%s",
+            len(ms),
+            sum(ms) / 1e3,
+            SLOW_THRESHOLD,
+            len(slow),
+            slow[:8],
+        )
 
     local_throughput = total_samples / elapsed
 

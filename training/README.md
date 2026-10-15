@@ -22,6 +22,71 @@ training/
 └── Containerfile                      image used by the torchrun examples above
 ```
 
+## Part 0 — Core Concepts
+
+### What do weights, loss, gradients, and optimizer each do?
+
+*What is the one training step actually doing?*
+
+```bash
+uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 \
+  -m training.ddp_buckets.c1_ddp_buckets
+```
+
+```text
+one step, same on every rank:
+
+  x ──forward(weights)──▶ y ──▶ loss = one number (how far y is from target)
+                               │
+  weights ──gradient───────────┘   backward(): d(loss)/d(each weight),
+        │                           stored in weight.grad (NOT a new weights)
+        ▼
+  optimizer.step():   weight -= lr × gradient     (Adam etc.)
+  optimizer.zero_grad()
+
+weights = the memory of the model
+loss    = a score, computed by forward, never used to update anything itself
+gradient= the "which way to nudge", computed by backward
+optimizer= the only thing that actually moves the weights
+```
+
+- the optimizer never sees loss or forward — it consumes `.grad` and updates
+  weights. That's why all DDP needs to average is the gradients.
+- `zero_grad` matters: `.grad` accumulates across steps, so skipping it adds
+  old gradients into the next update.
+
+### What are DDP hooks and buckets?
+
+*Why does DDP start all-reduce in the middle of `backward()` instead of
+waiting until it finishes?*
+
+```bash
+uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 \
+  -m training.ddp_buckets.c1_ddp_buckets --bucket-cap-mb 1    # many small buckets
+```
+
+What you see: the comm hook fires several times inside one `loss.backward()`
+call, each firing = one bucket's all-reduce starting.
+
+```text
+backward() fills gradients last-layer-first:
+
+  grad L8 ─▶ grad L7 ─▶ grad L6 ─▶ ... ─▶ grad L1
+       │              │
+       └─ bucket (≤ ~25 MB of grads) fills up → HOOK fires right there
+          → all-reduce(that bucket) starts on a background stream
+          → rest of backward keeps computing
+```
+
+- **hook** = a callback DDP attaches to leaf params: "your grad is filled,
+  you can ship now". It fires inside `backward()`, once per ready bucket.
+- **bucket** = a group of params whose grads are all-reduced together (default
+  25 MB). One all-reduce per bucket, not per param — batching cuts per-message
+  overhead.
+- because each bucket ships as soon as it's ready, communication overlaps the
+  remaining backward — comm is mostly hidden. c3's cost model shows when it
+  stops being hidden.
+
 ## Part 1 — How DDP Works
 
 ### Who does what

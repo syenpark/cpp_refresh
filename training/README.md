@@ -105,14 +105,14 @@ rank 0                           rank 1
 └───────────┬─────────────┘      └───────────┬─────────────┘
             ▼                                ▼
    DDP(model) fwd + bwd             DDP(model) fwd + bwd
-            │ ◀──── AllReduce(grad) ────▶    │               ← the ONLY comm
+            │ ◀──── AllReduce(grad) ────▶    │               ← the only comm per step
             ▼                                ▼
      optimizer.step()                 optimizer.step()       → identical weights
 ```
 
 | Component | Job | In `dataloader_benchmark.py` |
 | --- | --- | --- |
-| torchrun | launcher: spawns N copies, sets `RANK` / `WORLD_SIZE` / `MASTER_ADDR` / `MASTER_PORT` | `--nproc-per-node=4` |
+| torchrun | launcher: spawns N copies, sets `RANK` / `WORLD_SIZE` / `MASTER_ADDR` / `MASTER_PORT` | `--nproc-per-node=2` |
 | Sampler | which indices this rank takes, in what order | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
 | Dataset | ONE sample for index `i` — never a batch | `SyntheticDataset` |
 | DataLoader | drives the loop: sampler → `dataset[i]` → collate into a batch | `DataLoader(dataset, ..., sampler=sampler)` |
@@ -122,6 +122,8 @@ rank 0                           rank 1
   model to the GPU (my code).
 - `batch_size`, `shuffle`, `sampler`, `num_workers` are DataLoader settings,
   not Dataset ones.
+- `num_workers` = helper CPU processes per rank that run `dataset[i]` + collate
+  ahead (not ranks).
 - DDP averages gradients, not weights. Weights stay identical because DDP
   broadcasts rank 0's weights once at construction, then every rank applies
   the same averaged gradient with the same optimizer.
@@ -227,6 +229,9 @@ submission, not completion     one arrives                  (see Straggler Lab)
 "torchrun splits the data"         → torchrun launches + sets RANK/WORLD_SIZE/MASTER_ADDR/PORT; the sampler splits
 "no sampler → error / wrong model" → no error; same model as 1 rank, just no speedup
 "barrier = all-reduce"             → barrier only waits; all-reduce waits AND combines
+"zero_grad resets to the averaged grad" → backward ADDS (+=) into .grad; zero_grad clears it each step
+"workers = ranks"                  → workers are helper processes INSIDE one rank
+"set_epoch always reshuffles"      → only with shuffle=True: new seed per epoch, same order otherwise
 ```
 
 ## Part 2 — Why Training Is Slow

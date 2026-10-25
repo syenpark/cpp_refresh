@@ -91,26 +91,42 @@ backward() fills gradients last-layer-first:
 
 ### Who does what
 
-| Component | Job | Analogy | In `dataloader_benchmark.py` |
-| --- | --- | --- | --- |
-| Dataset | returns ONE sample for index `i` (`__len__`, `__getitem__(i)`), not a batch; `batch_size`, `shuffle`, `sampler`, `num_workers` are DataLoader settings | warehouse of numbered items | `SyntheticDataset` |
-| Sampler | decides which indices this process takes, and in what order | my share of the order numbers | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
-| DataLoader | fetches those indices from the dataset and groups them into batches | worker who picks items and boxes them | `DataLoader(dataset, ..., sampler=sampler)` |
-| DDP | wraps the model; averages **gradients** (not weights) across ranks during `backward()`. Weights stay identical because DDP broadcasts rank 0's weights once at construction, then every rank applies the same averaged gradient with the same optimizer | meeting where workers reconcile results | `DistributedDataParallel(model)` |
-| torchrun | a launcher: starts N copies of the same script, sets `RANK` / `WORLD_SIZE` / `MASTER_ADDR` / `MASTER_PORT` so they can find each other (rendezvous), and monitors them. Does NOT split data (sampler), average gradients (DDP), or move the model to the GPU (my code) | staffing N workers | `--nproc-per-node=4` |
+*Which component splits the data, and which one syncs the model?*
 
 ```text
-torchrun
-   │  spawns rank 0..N, sets RANK / WORLD_SIZE / MASTER_ADDR / MASTER_PORT
-   ▼
-Sampler ──indices──▶ Dataset ──(x,y)──▶ DataLoader ──batch──▶ DDP(model)
-                                                                  │
-                                                           loss.backward()
-                                                                  │
-                                                   AllReduce(grad) across ranks
-                                                                  │
-                                                           optimizer.step()
+torchrun --nproc-per-node=2        (spawns ranks + sets env, then just watches)
+   ├───────────────────────────────┐
+   ▼                               ▼
+rank 0                           rank 1
+┌─ DataLoader ────────────┐      ┌─ DataLoader ────────────┐
+│ sampler  → [0, 2, 4, …] │      │ sampler  → [1, 3, 5, …] │  ← split by math, no comm
+│ dataset[i] → 1 sample   │      │ dataset[i] → 1 sample   │
+│ collate ×B → batch      │      │ collate ×B → batch      │
+└───────────┬─────────────┘      └───────────┬─────────────┘
+            ▼                                ▼
+   DDP(model) fwd + bwd             DDP(model) fwd + bwd
+            │ ◀──── AllReduce(grad) ────▶    │               ← the ONLY comm
+            ▼                                ▼
+     optimizer.step()                 optimizer.step()       → identical weights
+```
 
+| Component | Job | In `dataloader_benchmark.py` |
+| --- | --- | --- |
+| torchrun | launcher: spawns N copies, sets `RANK` / `WORLD_SIZE` / `MASTER_ADDR` / `MASTER_PORT` | `--nproc-per-node=4` |
+| Sampler | which indices this rank takes, in what order | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
+| Dataset | ONE sample for index `i` — never a batch | `SyntheticDataset` |
+| DataLoader | drives the loop: sampler → `dataset[i]` → collate into a batch | `DataLoader(dataset, ..., sampler=sampler)` |
+| DDP | wraps the model; all-reduces **gradients** during `backward()` | `DistributedDataParallel(model)` |
+
+- torchrun does NOT split data (sampler), average gradients (DDP), or move the
+  model to the GPU (my code).
+- `batch_size`, `shuffle`, `sampler`, `num_workers` are DataLoader settings,
+  not Dataset ones.
+- DDP averages gradients, not weights. Weights stay identical because DDP
+  broadcasts rank 0's weights once at construction, then every rank applies
+  the same averaged gradient with the same optimizer.
+
+```text
 epoch
  └── step = optimizer.step() on one batch     global_batch = batch_size × world_size
 
@@ -119,13 +135,6 @@ with sampler:    2000 / 4 = 500 per rank → ceil(500/32) = 16 steps per rank pe
 without sampler: each rank sees all 2000 → ceil(2000/32) = 63 steps (4× the work, same model)
 global batch = 32 × 4 = 128 samples per optimizer.step()
 ```
-
-Only two things happen *between* ranks:
-
-- **Split the data** — the sampler does it. No communication: each rank just
-  computes its indices from its rank number (`r, r+N, r+2N, ...`).
-- **Keep the model in sync** — DDP does it. Communication: all-reduce averages
-  the gradients, so every rank's model stays identical after `optimizer.step()`.
 
 ### Without vs With DistributedSampler
 

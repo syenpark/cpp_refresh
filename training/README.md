@@ -232,9 +232,35 @@ submission, not completion     one arrives                  (see Straggler Lab)
 "zero_grad resets to the averaged grad" → backward ADDS (+=) into .grad; zero_grad clears it each step
 "workers = ranks"                  → workers are helper processes INSIDE one rank
 "set_epoch always reshuffles"      → only with shuffle=True: new seed per epoch, same order otherwise
+"total time / samples = training speed" → only if sum(steps) ≈ total; here ~90% was worker restarts
 ```
 
 ## Part 2 — Why Training Is Slow
+
+### Measuring step time correctly
+
+*Does "total time ÷ samples" give the real training speed?*
+
+```bash
+uv run torchrun --nproc-per-node=2 --master_addr=127.0.0.1 --master_port=29500 \
+  -m training.dataloader_benchmark --num-workers 2
+```
+
+```text
+step 0              ≈ 1000× the median step   (worker start = warmup)
+slowest step        = first step of epoch 1   (workers shut down + restart)
+sum(step times)     ≈ ½ of elapsed            (rest = final worker shutdown)
+overall             ≈ 90% worker start/stop, real steps ≈ 5%
+                    → reported throughput ≈ 20× too low
+```
+
+```text
+epoch 0 [warmup | steady steps...] → kill workers + spawn new → epoch 1 [...] → kill workers
+                                     ^ persistent_workers=False (default)
+```
+
+- Check `sum(step times) ≈ total` before trusting a throughput number.
+- Fix: `persistent_workers=True`, or time only steady steps (skip warmup + epoch boundaries).
 
 ### CPU Contention Lab
 

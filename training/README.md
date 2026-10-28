@@ -113,10 +113,13 @@ rank 0                           rank 1
 | Component | Job | In `dataloader_benchmark.py` |
 | --- | --- | --- |
 | torchrun | launcher: spawns N copies, sets `RANK` / `WORLD_SIZE` / `MASTER_ADDR` / `MASTER_PORT` | `--nproc-per-node=2` |
-| Sampler | which indices this rank takes, in what order | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
-| Dataset | ONE sample for index `i` — never a batch | `SyntheticDataset` |
-| DataLoader | drives the loop: sampler → `dataset[i]` → collate into a batch | `DataLoader(dataset, ..., sampler=sampler)` |
+| DataLoader | drives the loop: asks its sampler for indices, calls `dataset[i]` per index, collates into a batch | `DataLoader(dataset, ..., sampler=sampler)` |
+| ↳ Sampler (part of DataLoader) | which indices this rank takes, in what order | `DistributedSampler(dataset, num_replicas=world_size, rank=rank)` |
+| ↳ Dataset (part of DataLoader) | index `i` → ONE sample, never a batch | `SyntheticDataset` |
 | DDP | wraps the model; all-reduces **gradients** during `backward()` | `DistributedDataParallel(model)` |
+
+Build order ≠ run order. In code the Dataset is created first (DataLoader needs it
+as an argument); at run time the DataLoader drives: sampler → `dataset[i]` → batch.
 
 - torchrun does NOT split data (sampler), average gradients (DDP), or move the
   model to the GPU (my code).
@@ -179,15 +182,15 @@ shuffle=True — here shuffle=False, so it has no visible effect.
 ### One Training Iteration: CPU → GPU → DDP
 
 ```text
-Dataset → DataLoader → CPU batch ──.to("cuda")──▶ GPU batch
-                                                      │
-                                                   forward
-                                                      │
-                                                    loss
-                                                      │
-                                   backward  (+ DDP AllReduce, overlapped)
-                                                      │
-                                              optimizer.step()
+DataLoader (sampler → dataset[i] → collate) → CPU batch ──.to("cuda")──▶ GPU batch
+                                                                             │
+                                                                          forward
+                                                                             │
+                                                                           loss
+                                                                             │
+                                                          backward  (+ DDP AllReduce, overlapped)
+                                                                             │
+                                                                     optimizer.step()
 
 DataLoader slow → queue empty → next(loader) waits → GPU starves
                                         (low GPU util ≠ GPU bottleneck)
@@ -233,6 +236,7 @@ submission, not completion     one arrives                  (see Straggler Lab)
 "workers = ranks"                  → workers are helper processes INSIDE one rank
 "set_epoch always reshuffles"      → only with shuffle=True: new seed per epoch, same order otherwise
 "total time / samples = training speed" → only if sum(steps) ≈ total; here ~90% was worker restarts
+"Dataset → DataLoader (Dataset runs first)" → build order only; at run time the DataLoader calls dataset[i]
 ```
 
 ## Part 2 — Why Training Is Slow

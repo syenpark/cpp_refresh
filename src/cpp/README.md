@@ -37,6 +37,73 @@ mutex block:  lock.lock()                 → no CPU, OS wakes it later
 * blocking frees the CPU but pays a wake-up/context-switch cost — better for
   larger critical sections
 
+## Cheat sheets
+
+### `{}` vs `()` — which one to initialize with?
+
+```cpp
+int a(3.7);                   // 3: silently truncates
+int b{3.7};                   // compile error: braces forbid narrowing
+int c{};                      // 0: value-initialized
+int d;                        // garbage (local var): never read before assigning
+Widget w();                   // NOT an object: declares a function (most vexing parse)
+Widget w{};                   // default-constructed object
+
+std::vector<int> v1(3, 7);    // {7, 7, 7}  → (count, value)
+std::vector<int> v2{3, 7};    // {3, 7}     → the list of elements
+std::vector<int> v3(5);       // {0,0,0,0,0}
+std::vector<int> v4{5};       // {5}
+
+auto x{3};                    // int
+auto y = {3};                 // std::initializer_list<int>  (surprise)
+```
+
+```text
+T x{...}  → "here are the values"       (initializer_list wins if T has one)
+T x(...)  → "call this constructor"     (size, count, capacity, …)
+T x = v;  → plain copy-init, fine for simple types
+```
+
+* Default to `{}`: it zero-initializes and catches narrowing.
+* Use `()` when a container should run its count/size constructor (`vector<int>(n)`, `string(n, 'x')`).
+  With `{}` you get the elements themselves instead.
+
+### stack vs queue vs deque vs vector — which method name?
+
+```text
+vector          [ a b c d ]  ← push_back / pop_back      front()  back()  [i]
+                (no push_front: would shift every element)
+
+deque     push_front →  [ a b c d ]  ← push_back          front()  back()  [i]
+          pop_front  ←               → pop_back
+
+stack (LIFO)          [ a b c d ]  ← push / pop            top()
+                       bottom   top
+
+queue (FIFO)   pop ←  [ a b c d ]  ← push                  front()  back()
+                     front   back
+
+priority_queue        heap         push / pop              top()  (largest first)
+```
+
+| Container | add | remove | read | `[i]` / iterate |
+| --- | --- | --- | --- | --- |
+| `vector` | `push_back`, `emplace_back` | `pop_back` | `front`, `back` | yes |
+| `deque` | `push_back`, `push_front` | `pop_back`, `pop_front` | `front`, `back` | yes |
+| `stack` | `push`, `emplace` | `pop` | `top` | no |
+| `queue` | `push`, `emplace` | `pop` | `front`, `back` | no |
+| `priority_queue` | `push`, `emplace` | `pop` | `top` | no |
+
+```cpp
+std::stack<int> s;
+int t = s.top();   // read first...
+s.pop();           // ...then remove: pop() returns void
+```
+
+* `stack`/`queue`/`priority_queue` are adapters: a restricted interface over a `deque` (or `vector`).
+  They name only the end you're allowed to touch: `top` for one end, `push`/`pop` with no `_back`.
+* `pop()` returns nothing, and `top()`/`front()`/`pop()` on an empty container is UB. Check `empty()` first.
+
 ## Analytics Bootstrap
 
 A C++ bootstrap for a low-latency analytics container: build system, config
